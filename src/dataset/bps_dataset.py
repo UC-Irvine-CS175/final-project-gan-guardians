@@ -133,7 +133,6 @@ class BPSMouseDataset(torch.utils.data.Dataset):
                 # get the bps image file name from the metadata dataframe at the given index
         row = self.meta_df.iloc[idx]
         img_fname = row["filename"]
-        label = str(row['particle_type'])
         # formulate path to image given the root directory (note meta.csv is in the
         # same directory as the images)
 
@@ -157,8 +156,20 @@ class BPSMouseDataset(torch.utils.data.Dataset):
         if self.transform:
             img_array = self.transform(img_array)
 
+        # Fetch one hot encoded labels for all classes of particle_type as a Series
+        particle_type_tensor = row[['particle_type_Fe', 'particle_type_X-ray']]
+
+        # Convert Series to numpy array
+        particle_type_tensor = particle_type_tensor.to_numpy().astype(np.bool_)
+        
+        # Convert One Hot Encoded labels to tensor
+        particle_type_tensor = torch.from_numpy(particle_type_tensor)
+        # Convert tensor data type to Float
+        particle_type_tensor = particle_type_tensor.type(torch.FloatTensor)
+        
+
         # return the image and associated label
-        return img_array, label
+        return img_array, particle_type_tensor
 
 def main():
     """main function to test PyTorch Dataset class"""
@@ -176,8 +187,27 @@ def main():
                                    local_train_dir,
                                    transform=None,
                                    file_on_prem=True)
+    
     print(training_bps.__len__())
     print(training_bps.__getitem__(0))
+    
+    # Testing with BPSMouseDataset from tests.
+    dataset = BPSMouseDataset('data.csv',
+                                        os.path.join(pyprojroot.here(),'tests/test_dir'),
+                                           transform=transforms.Compose([
+                                               NormalizeBPS(),
+                                               ResizeBPS(224, 224),
+                                               VFlipBPS(),
+                                               HFlipBPS(),
+                                               RotateBPS(90),
+                                               RandomCropBPS(200, 200),
+                                               ToTensor()
+                                            ]),
+                                            file_on_prem=True
+                                           )
+
+    print(dataset.__len__())
+    print(dataset.__getitem__(0))
 
 if __name__ == "__main__":
     main()

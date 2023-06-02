@@ -116,7 +116,9 @@ class RandomCropBPS(object):
 
 
 class ToTensor(object):
-    """Convert ndarrays in sample to Tensors."""
+    """
+    Convert ndarrays in sample to Tensors.
+    """
     def __call__(self, image: np.ndarray) -> torch.Tensor:
         # swap color axis because
         # numpy image: H x W x C
