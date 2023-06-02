@@ -39,8 +39,8 @@ class NormalizeBPS(object):
 
 class ResizeBPS(object):
     def __init__(self, resize_height: int, resize_width:int):
-        self._resize_height = resize_height
-        self._resize_width = resize_width
+        self.resize_height = resize_height
+        self.resize_width = resize_width
     
     def __call__(self, img:np.ndarray) -> np.ndarray:
         """
@@ -51,8 +51,8 @@ class ResizeBPS(object):
         returns:
             torch.Tensor: resized image.
         """
-        img.resize((self._resize_height, self._resize_width), refcheck=False)
-        return img
+        img_resized = cv2.resize(img, (self.resize_width, self.resize_height))
+        return img_resized
 
 
 class VFlipBPS(object):
@@ -128,8 +128,6 @@ class ToTensor(object):
 
         img = image.transpose((2, 0, 1))
         img_tensor = torch.from_numpy(img)
-        #img_tensor = torch.from_numpy(image).unsqueeze(0)
-        # image = image.transpose((2, 0, 1))
         return img_tensor
 
 
