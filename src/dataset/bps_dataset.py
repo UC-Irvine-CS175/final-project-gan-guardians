@@ -130,19 +130,18 @@ class BPSMouseDataset(torch.utils.data.Dataset):
             label (int): label of image
         """
 
-        # get the bps image file name from the metadata dataframe at the given index
+                # get the bps image file name from the metadata dataframe at the given index
         row = self.meta_df.iloc[idx]
         img_fname = row["filename"]
-
         # formulate path to image given the root directory (note meta.csv is in the
         # same directory as the images)
 
-        #img_key = f"{self.meta_dir}/{img_fname}"
         img_key = os.path.join(self.meta_dir, img_fname)
-        # print(f'img_key: {img_key}')
 
-        # write code to fetch image from s3 bucket or from the local file system based on
-        # the boolean value of self.on_prem
+        # If on_prem is False, then fetch the image from s3 bucket using the get_bytesio_from_s3
+        # function, get the contents of the buffer returned, and convert it to a numpy array
+        # with datatype unsigned 16 bit integer used to represent microscopy images.
+        # If on_prem is True load the image from local. 
 
         if not self.on_prem:
             img_bytesio = get_bytesio_from_s3(self.s3_client, self.bucket_name, img_key)
@@ -153,24 +152,13 @@ class BPSMouseDataset(torch.utils.data.Dataset):
         else:
             img_array = cv2.imread(img_key, cv2.IMREAD_ANYDEPTH)
 
+        # apply tranformation if available
         if self.transform:
-            img_tensor = self.transform(img_array)
+            img_array = self.transform(img_array)
 
-        else:
-            img_tensor = img_array
-            
+        # return the image and associated label
 
-        # Fetch one hot encoded labels for all classes of particle_type as a Series
-        particle_type_tensor = row[['particle_type_Fe', 'particle_type_X-ray']]
-        # Convert Series to numpy array
-        particle_type_tensor = particle_type_tensor.to_numpy().astype(np.bool_)
-        
-        # Convert One Hot Encoded labels to tensor
-        particle_type_tensor = torch.from_numpy(particle_type_tensor)
-        # Convert tensor data type to Float
-        particle_type_tensor = particle_type_tensor.type(torch.FloatTensor)
-
-        return img_tensor, particle_type_tensor
+        return img_array, self.meta_df.iloc[idx, 2]
 
 def main():
     """main function to test PyTorch Dataset class"""
