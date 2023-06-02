@@ -18,22 +18,29 @@ class NormalizeBPS(object):
         """
         Normalize the array values between 0 - 1
         """
-        array_max = img_array.max()
-        array_min = img_array.min()
+        # Normalizing uint numpy arrays representing images to a floating point
+        # range between 0 and 1 brings the pixel values of the image to a common
+        # scale that is compatible with most deep learning models.
+        # Additionally, normalizing the pixel values can help to reduce the effects
+        # of differences in illumination and contrast across different images, which
+        # can be beneficial for model training. To normalize, we divide each pixel
+        # value by the maximum value of the uint16 data type.
 
-        normalized_array = np.ndarray(img_array.shape)
+        # Normalize array values between 0 - 1
+        img_array = img_array / np.iinfo(np.uint16).max
 
-        for i in range(len(img_array)):
-            for j in range(len(img_array[i])):
-                normalized_array[i][j] = (img_array[i][j]-array_min)/(array_max-array_min)
-        
-        return img_array
+        # Conversion of uint16 -> float32
+        img_normalized = img_array.astype(np.float32)
+
+        # img_normalized = img_float / np.max(img_float)  # 65535.0
+
+        return img_normalized
 
 
 class ResizeBPS(object):
     def __init__(self, resize_height: int, resize_width:int):
-        self._resize_height = resize_height
-        self._resize_width = resize_width
+        self.resize_height = resize_height
+        self.resize_width = resize_width
     
     def __call__(self, img:np.ndarray) -> np.ndarray:
         """
@@ -44,8 +51,8 @@ class ResizeBPS(object):
         returns:
             torch.Tensor: resized image.
         """
-        img.resize((self._resize_height, self._resize_width), refcheck=False)
-        return img
+        img_resized = cv2.resize(img, (self.resize_width, self.resize_height))
+        return img_resized
 
 
 class VFlipBPS(object):
@@ -109,16 +116,19 @@ class RandomCropBPS(object):
 
 
 class ToTensor(object):
-    """Convert ndarrays in sample to Tensors."""
+    """
+    Convert ndarrays in sample to Tensors.
+    """
     def __call__(self, image: np.ndarray) -> torch.Tensor:
+        # swap color axis because
         # numpy image: H x W x C
         # torch image: C x H x W
+        if len(image.shape) == 2:
+            image = image.reshape(image.shape[0], image.shape[1], 1)
 
-        image = np.expand_dims(image, axis=0)
-
-        new_tensor = torch.from_numpy(image)
-        
-        return new_tensor
+        img = image.transpose((2, 0, 1))
+        img_tensor = torch.from_numpy(img)
+        return img_tensor
 
 
 class ZoomBPS(object):
@@ -140,6 +150,17 @@ class ZoomBPS(object):
             return img
         else:
             return img_resize
+
+
+class RescaleBPS(object):
+    def __call__(self, img_array) -> np.array(np.float32):
+        """
+        Rescale the array values between -1 and 1
+        """
+        img_array = img_array / np.iinfo(np.uint16).max
+        img_float = img_array.astype(np.float32)
+        img_rescaled = img_float * 2 - 1
+        return img_rescaled
 
 def main():
     """Driver function for testing the augmentations. Make sure the file paths work for you."""

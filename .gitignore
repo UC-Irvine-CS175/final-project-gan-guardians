@@ -1,6 +1,16 @@
-#files
-data/
-src/dataset/solutions/
+# directories
+src/model/solutions
+data/raw
+data/processed/*.tif
+src/model/wandb
+
+models/dummy_vis
+models/wandb
+models/
+.vscode
+visualization/baselines
+src/model/TODO.md
+src/dataset/bps_int_labelIGNORE.py
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

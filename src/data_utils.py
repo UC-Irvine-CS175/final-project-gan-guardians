@@ -53,7 +53,9 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 import pyprojroot
 import sys
+from tqdm import tqdm
 sys.path.append(str(pyprojroot.here()))
+# print(sys.path)
 
 
 def get_bytesio_from_s3(
@@ -72,12 +74,12 @@ def get_bytesio_from_s3(
         BytesIO: BytesIO object from the file contents
     """
     # use the S3 client to read the contents of the file into memory
-
-    file_info = s3_client.get_object(Bucket=bucket_name, Key=file_path)["Body"].read()
+    response = s3_client.get_object(Bucket=bucket_name, Key=file_path)
+    file_contents = response["Body"].read()
 
     # create a BytesIO object from the file contents
-
-    return BytesIO(file_info)
+    file_buffer = BytesIO(file_contents)
+    return file_buffer
 
 
 def get_file_from_s3(
@@ -90,28 +92,23 @@ def get_file_from_s3(
     args:
       s3_client (boto3.client): s3 client should be configured for open UNSIGNED signature.
       bucket_name (str): name of bucket from AWS open source registry.
-      s3_file_path (str): full blob/file path name from aws including file name and extension.
-      local_file_path (str): user's local directory.
+      s3_file_path (str): blob/file path name from aws
+      local_file_path (str): file path for user's local directory.
 
     returns:
       str: local file path with naming convention of the file that was downloaded from s3 bucket
     """
+    # If time: add in error handling for string formatting
     
-    # Create the directory if it does not exist
-    
-    if not os.path.exists(local_file_path):
-        os.makedirs(local_file_path, exist_ok=True)
+    # os.makedirs(os.path.join(sys.path[0], local_file_path), exist_ok=True)
+    os.makedirs(local_file_path, exist_ok=True)
 
-    # Create path with local directory provided by the userfile and the name of the s3 file of interest
-    # derived from the s3_file_path
-
-    new_path = os.path.join(local_file_path, s3_file_path.split("/")[-1])
+    # Create local file path with file having the same name as the file in the s3 bucket
+    new_file_path = f"{local_file_path}/{s3_file_path.split('/')[-1]}"
 
     # Download file
-    
-    s3_client.download_file(Bucket = bucket_name, Key = s3_file_path, Filename = new_path)
-    
-    return new_path
+    s3_client.download_file(bucket_name, s3_file_path, new_file_path)
+    return new_file_path
 
 
 def save_tiffs_local_from_s3(
@@ -123,30 +120,27 @@ def save_tiffs_local_from_s3(
 ) -> None:
     """
     This function retrieves tiff files from a locally stored csv file containing specific aws s3 bucket
-    filenames, constructs the appropriate paths to retrieve the files of interest locally to the user's 
-    machine following the same naming convention as the files from s3.
+    blob/file paths and saves the files of interest the same filepath on the user's machine following
+    the same naming convention as the files from s3.
 
     args:
       s3_client (boto3.client): s3 client should be configured for open UNSIGNED signature.
       bucket_name (str): name of bucket from AWS open source registry.
       s3_path (str): blob/file directory where files of interest reside in s3 from AWS
-      local_fnames_meta_path (str): file path for user's local directory containing the csv file containing the filenames
+      local_fnames_meta_path (str): file path for user's local directory containing the csv file containing the blob/file paths
       save_file_path (str): file path for user's local directory where files of interest will be saved
     returns:
       None
     """
+
     # Get s3_file_paths from local_fnames_meta_path csv file
+    df = pd.read_csv(local_fnames_meta_path)
+    s3_file_paths = df["filename"].values.tolist()
 
-    s3_file_paths = pd.read_csv(local_fnames_meta_path)["filename"]
-
-    # Download files after constructing s3 full paths including the filenames from the csv file
-    # Call get_file_from_s3 function for each s3_file_path in s3_file_paths
-
-    for p in s3_file_paths:
-        new_s3_path = s3_path + "/" + p
-        get_file_from_s3(s3_client, bucket_name, new_s3_path, save_file_path)
-
-
+    # Download files because the meta.csv file entries do not contain the full paths
+    for s3_file_path in tqdm(s3_file_paths):
+        s3_file_path_full = f"{s3_path}/{s3_file_path}"
+        get_file_from_s3(s3_client, bucket_name, s3_file_path_full, save_file_path)
 
 
 def export_subset_meta_dose_hr(
@@ -227,8 +221,6 @@ def export_subset_meta_dose_hr(
 
     return (sliced_df_path_output, len(pandas_csv[sliced_df]))
 
-
-
     
 def train_test_split_subset_meta_dose_hr(
         subset_meta_dose_hr_csv_path: str,
@@ -298,7 +290,7 @@ def train_test_split_subset_meta_dose_hr(
 
 def main():
     """
-    A driver function for testing the functions in this module. Use if you like.
+    A driver function for testing the functions in this module. 
     """
 
     output_dir = '../data/processed'
@@ -309,61 +301,30 @@ def main():
     s3_meta_csv_path = f'{s3_path}/meta.csv'
     s3_client = boto3.client('s3', config=Config(signature_version=UNSIGNED))
 
-    # get_bytesio_from_s3(s3_client, bucket_name, s3_meta_csv_path)
-
     # local file path info
-    local_file_path = "..\\data\\raw"
+    local_file_path = "../data/raw"
 
-    # save_tiffs_local_from_s3(s3_client, bucket_name, s3_path, "..\\src\\testing_csv.csv", local_file_path)
+    local_new_path_fname = get_file_from_s3(
+        s3_client=s3_client,
+        bucket_name=bucket_name,
+        s3_file_path=s3_meta_csv_path,
+        local_file_path=local_file_path)
 
-    # print(export_subset_meta_dose_hr("hi", 4, "..\\src\\testing_csv.csv", "hi.csv"))
+    subset_new_path_fname, subset_size = export_subset_meta_dose_hr(
+        dose_Gy_specifier='hi',
+        hr_post_exposure_val=4,
+        in_csv_path_local=local_new_path_fname,
+        out_dir_csv=output_dir)
 
-    print(train_test_split_subset_meta_dose_hr("..\\src\\testing_csv.csv", 0.2, "..\\data\\raw"))
+    train_test_split_subset_meta_dose_hr(
+        subset_meta_dose_hr_csv_path=subset_new_path_fname,
+        test_size=0.2,
+        out_dir_csv=output_dir,
+        random_state=42,
+        stratify_col="particle_type")
 
-    # local_new_path_fname = get_file_from_s3(
-    #     s3_client=s3_client,
-    #     bucket_name=bucket_name,
-    #     s3_file_path=s3_meta_csv_path,
-    #     local_file_path=local_file_path)
-
-    # subset_new_path_fname, subset_size = export_subset_meta_dose_hr(
-    #     dose_Gy_specifier='hi',
-    #     hr_post_exposure_val=4,
-    #     in_csv_path_local=local_new_path_fname,
-    #     out_dir_csv=output_dir)
-
-    # print(subset_size)
-
-    # subset_new_path_fname, subset_size = export_subset_meta_dose_hr(
-    #     dose_Gy_specifier='med',
-    #     hr_post_exposure_val=4,
-    #     in_csv_path_local=local_new_path_fname,
-    #     out_dir_csv=output_dir)
-    
-    # print(subset_size)
-
-    # subset_new_path_fname, subset_size = export_subset_meta_dose_hr(
-    #     dose_Gy_specifier='low',
-    #     hr_post_exposure_val=4,
-    #     in_csv_path_local=local_new_path_fname,
-    #     out_dir_csv=output_dir)
-    
-
-    # train_test_split_subset_meta_dose_hr(
-    #     subset_meta_dose_hr_csv_path=subset_new_path_fname,
-    #     test_size=0.2,
-    #     out_dir_csv=output_dir,
-    #     random_state=42,
-    #     stratify_col="particle_type")
-
-    
-    ## save tiffs locally from s3 using boto3
-    # save_tiffs_local_from_s3(
-    # s3_client=s3_client,
-    # bucket_name=bucket_name,
-    # s3_path=s3_path,
-    # local_fnames_meta_path=subset_new_path_fname,
-    # save_file_path=local_file_path)
+    val_save_file_path = pyprojroot.here()/'data'/'processed'
+    val_path_fname = val_save_file_path/'meta_dose_hi_hr_4_post_exposure_test.csv'
 
 
 if __name__ == "__main__":
