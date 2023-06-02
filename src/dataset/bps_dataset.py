@@ -133,6 +133,7 @@ class BPSMouseDataset(torch.utils.data.Dataset):
                 # get the bps image file name from the metadata dataframe at the given index
         row = self.meta_df.iloc[idx]
         img_fname = row["filename"]
+        label = str(row['particle_type'])
         # formulate path to image given the root directory (note meta.csv is in the
         # same directory as the images)
 
@@ -157,8 +158,7 @@ class BPSMouseDataset(torch.utils.data.Dataset):
             img_array = self.transform(img_array)
 
         # return the image and associated label
-
-        return img_array, self.meta_df.iloc[idx, 2]
+        return img_array, label
 
 def main():
     """main function to test PyTorch Dataset class"""
