@@ -55,8 +55,8 @@ class BPSConfig:
     data_dir:           str = os.path.join(root,'data','processed')
     train_meta_fname:   str = 'meta_dose_hi_hr_4_post_exposure_train.csv'
     val_meta_fname:     str = 'meta_dose_hi_hr_4_post_exposure_test.csv'
-    save_vis_dir:       str = os.path.join(root, 'models', 'dummy_vis')
-    save_models_dir:    str = os.path.join(root, 'models', 'baselines')
+    save_vis_dir:       str = os.path.join(root, 'model', 'GAN', 'dummy_vis')
+    save_models_dir:    str = os.path.join(root, 'model', 'GAN', 'baselines')
     batch_size:         int = 64
     max_epochs:         int = 10
     accelerator:        str = 'auto'
@@ -153,7 +153,8 @@ class GAN(L.LightningModule):
 
         # train generator
         # generate images
-        self.toggle_optimizer(optimizer=optimizer_g, optimizer_idx=0)
+        # self.toggle_optimizer(optimizer=optimizer_g, optimizer_idx=0)
+        self.toggle_optimizer(optimizer=optimizer_g)
         self.generated_imgs = self(z)
 
         # log sampled images
@@ -177,11 +178,13 @@ class GAN(L.LightningModule):
         self.manual_backward(g_loss)
         optimizer_g.step()
         optimizer_g.zero_grad()
-        self.untoggle_optimizer(optimizer_idx=0)
+        # self.untoggle_optimizer(optimizer_idx=0)
+        self.untoggle_optimizer(optimizer=optimizer_g)
 
         # train discriminator
         # Measure discriminator's ability to classify real from generated samples
-        self.toggle_optimizer(optimizer=optimizer_d, optimizer_idx=1)
+        # self.toggle_optimizer(optimizer=optimizer_d, optimizer_idx=1)
+        self.toggle_optimizer(optimizer=optimizer_d)
 
         # how well can it label as real?
         valid = torch.ones(imgs.size(0), 1)
@@ -201,7 +204,8 @@ class GAN(L.LightningModule):
         self.manual_backward(d_loss)
         optimizer_d.step()
         optimizer_d.zero_grad()
-        self.untoggle_optimizer(optimizer_idx=1)
+        # self.untoggle_optimizer(optimizer_idx=1)
+        self.untoggle_optimizer(optimizer=optimizer_d)
 
     def configure_optimizers(self):
         lr = self.hparams.lr
