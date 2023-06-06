@@ -158,7 +158,10 @@ class ResNet101(resnet.ResNet):
 
         # flatten the output
         x = torch.flatten(x, 1)
-     
+
+        # linear transform of tensor (TO MATCH ORIGINAL RESNET FUNCTION)
+        x = self.fc(x)
+
         return x
     
 def main():
@@ -186,8 +189,48 @@ def main():
     
     # Initialize pretrained ResNet101 model
     model = ResNet101(pretrained=True)
+
+    # we need to freeze parameters so that pretrained layers aren't modified
+    for param in model.parameters():
+        param.requires_grad = False
+
+
+    num_classes = 2  # re-initialize the number of classes for the final transform 
+    model.fc = torch.nn.Linear(model.fc.in_features, num_classes)
+
+    # define loss function and optimizer for training
+    loss_func = torch.nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+
     # Move the model to GPU
     model.to(config.device)
+
+    train_dataloader = bps_datamodule.train_dataloader()
+
+    num_epochs = 11 # CHANGE TO MATCH DATA
+
+    for epoch in range(num_epochs):
+        model.train()
+        running_loss = 0.0
+        for inputs, labels in train_dataloader:
+            inputs = inputs.to(config.device)
+            labels = labels.to(config.device)
+
+            optimizer.zero_grad()
+            outputs = model(inputs)
+            loss = loss_func(outputs, labels)
+            loss.backward()
+            optimizer.step()
+
+            running_loss += loss.item()
+
+    model.eval()
+    
+    return
+    ##################################################################################################################################
+    ##################################################################################################################################
+    ##################################################################################################################################
+    
     # Set the model to evaluation mode (no gradient calculation) since
     # we are only interested in how the model perceives image features 
     # and not the classification
