@@ -159,6 +159,9 @@ class ResNet101(resnet.ResNet):
         # flatten the output
         x = torch.flatten(x, 1)
      
+        # linear transformation to the data (ADDED TO MATCH RESNET SUPERVISED MODEL)
+        x = self.fc(x)
+
         return x
     
 def main():
