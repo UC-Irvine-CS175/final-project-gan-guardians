@@ -55,10 +55,10 @@ class BPSConfig:
     data_dir:           str = os.path.join(root,'data','processed')
     train_meta_fname:   str = 'meta_dose_hi_hr_4_post_exposure_train.csv'
     val_meta_fname:     str = 'meta_dose_hi_hr_4_post_exposure_test.csv'
-    save_vis_dir:       str = os.path.join(root, 'model', 'GAN', 'dummy_vis')
-    save_models_dir:    str = os.path.join(root, 'model', 'GAN', 'baselines')
+    save_vis_dir:       str = os.path.join(root, 'models', 'dummy_vis')
+    save_models_dir:    str = os.path.join(root, 'models', 'baselines')
     batch_size:         int = 64
-    max_epochs:         int = 10
+    max_epochs:         int = 1
     accelerator:        str = 'auto'
     acc_devices:        int = 1
     device:             str = 'cuda' if torch.cuda.is_available() else 'cpu'
