@@ -11,6 +11,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
 import torchvision.transforms as transforms
+from PIL import Image
 from torch.utils.data import DataLoader, random_split
 import wandb
 from src.dataset.bps_datamodule import BPSDataModule
@@ -53,12 +54,13 @@ class BPSConfig:
 
     """
     data_dir:           str = os.path.join(root,'data','processed')
+    gen_image_save_dir: str = os.path.join(root, 'data', 'generated')
     train_meta_fname:   str = 'meta_dose_hi_hr_4_post_exposure_train.csv'
     val_meta_fname:     str = 'meta_dose_hi_hr_4_post_exposure_test.csv'
     save_vis_dir:       str = os.path.join(root, 'models', 'dummy_vis')
     save_models_dir:    str = os.path.join(root, 'models', 'baselines')
     batch_size:         int = 64
-    max_epochs:         int = 1
+    max_epochs:         int = 10
     accelerator:        str = 'auto'
     acc_devices:        int = 1
     device:             str = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -69,6 +71,7 @@ class Generator(nn.Module):
     def __init__(self, latent_dim, img_shape):
         super().__init__()
         self.img_shape = img_shape
+
 
         def block(in_feat, out_feat, normalize=True):
             layers = [nn.Linear(in_feat, out_feat)]
@@ -86,10 +89,12 @@ class Generator(nn.Module):
             nn.Tanh(),
         )
 
+
     def forward(self, z):
         img = self.model(z)
         img = img.view(img.size(0), *self.img_shape)
         return img
+
 
 class Discriminator(nn.Module):
     def __init__(self, img_shape):
@@ -104,18 +109,21 @@ class Discriminator(nn.Module):
             nn.Sigmoid(),
         )
 
+
     def forward(self, img):
         img_flat = img.view(img.size(0), -1)
         validity = self.model(img_flat)
 
         return validity
-    
+
+
 class GAN(L.LightningModule):
     def __init__(
         self,
         channels,
         width,
         height,
+        gen_image_save_dir: str,
         latent_dim: int = 100,
         lr: float = 0.0002,
         b1: float = 0.5,
@@ -136,11 +144,17 @@ class GAN(L.LightningModule):
 
         self.example_input_array = torch.zeros(2, self.hparams.latent_dim)
 
+        # Save directory of the generated images after each epoch.
+        self.gen_image_save_dir = gen_image_save_dir
+
+
     def forward(self, z):
         return self.generator(z)
 
+
     def adversarial_loss(self, y_hat, y):
         return F.binary_cross_entropy(y_hat, y)
+
 
     def training_step(self, batch, batch_idx):
         imgs, _ = batch
@@ -160,7 +174,7 @@ class GAN(L.LightningModule):
         # log sampled images
         sample_imgs = self.generated_imgs[:6]
         grid = torchvision.utils.make_grid(sample_imgs)
-
+        
         # Convert the grid to a numpy array
         grid_np = grid.permute(1, 2, 0).cpu().numpy()
 
@@ -207,6 +221,7 @@ class GAN(L.LightningModule):
         # self.untoggle_optimizer(optimizer_idx=1)
         self.untoggle_optimizer(optimizer=optimizer_d)
 
+
     def configure_optimizers(self):
         lr = self.hparams.lr
         b1 = self.hparams.b1
@@ -216,6 +231,19 @@ class GAN(L.LightningModule):
         opt_d = torch.optim.Adam(self.discriminator.parameters(), lr=lr, betas=(b1, b2))
         return opt_g, opt_d
 
+
+    def on_train_epoch_end(self):
+        # # Save the image
+        # z = self.validation_z.type_as(self.generator.model[0].weight)
+        # sample_imgs = self.generated_imgs[:6]
+
+        # img_transform = transforms.ToPILImage()
+        # img = img_transform(sample_imgs[0])
+        # img.save(os.path.join(self.gen_image_save_dir, 
+        #                       f'generated_bps_epoch_{self.current_epoch}.jpeg'))
+        return super().on_train_epoch_end()
+
+
     def on_validation_epoch_end(self):
         z = self.validation_z.type_as(self.generator.model[0].weight)
 
@@ -223,6 +251,7 @@ class GAN(L.LightningModule):
         sample_imgs = self(z)
         grid = torchvision.utils.make_grid(sample_imgs)
         self.logger.experiment.add_image("generated_images", grid, self.current_epoch)
+
 
 def main():
     config = BPSConfig()
@@ -245,14 +274,20 @@ def main():
                    "architecture": "MNIST GAN",
                    "dataset": "BPS Microscopy"
                })
+    
+    # Create a GAN model.
     model = GAN(1, bps_datamodule.resize_dims[0],
                 bps_datamodule.resize_dims[1],
-                batch_size=config.batch_size,)
+                batch_size=config.batch_size,
+                gen_image_save_dir=config.gen_image_save_dir)
+    
+    # Create a PyTorch Lightning trainer.
     trainer = L.Trainer(
         accelerator=config.accelerator,
         devices=config.acc_devices,
         max_epochs=config.max_epochs,
     )
+    # Train the model.
     trainer.fit(model, bps_datamodule.train_dataloader(), )
     wandb.finish()
 
