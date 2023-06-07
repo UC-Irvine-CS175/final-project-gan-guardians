@@ -251,10 +251,9 @@ def main():
             images, labels = data[0].to(config.device), data[1].to(config.device)
             outputs = model(images)
             _, predicted = torch.max(outputs.data, 1)
-            total += labels.size(0)
+            # total += labels.size(0)
             correct += (predicted == labels).sum().item()
-
-    wandb.log({"epoch": epoch, "accuracy": 100 * correct / total})
+            wandb.log({"epoch": epoch, "accuracy": 100 * correct / config.batch_size})
 
 
     # In this example we will take advantage of the WandB gui via the 
