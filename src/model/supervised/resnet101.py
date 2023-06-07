@@ -40,10 +40,6 @@ from src.vis_utils import(
     plot_2D_scatter_plot,
     plot_3D_scatter_plot,
 )
-from pca_tsne import(
-    perform_tsne,
-    create_tsne_cp_df,
-)
 
 @dataclass
 class BPSConfig:
@@ -165,6 +161,9 @@ class ResNet101(resnet.ResNet):
         return x
     
 def main():
+
+    wandb.login()
+
     # Initialize a BPSConfig object
     config = BPSConfig()
     
@@ -184,7 +183,8 @@ def main():
                                    num_workers=config.num_workers)
     
     # Using BPSDataModule's setup, define the stage name ('train' or 'val')
-    bps_datamodule.setup(stage=config.dm_stage)
+    bps_datamodule.setup(stage="train")
+    bps_datamodule.setup(stage="validate")
 
     
     # Initialize pretrained ResNet101 model
@@ -206,15 +206,31 @@ def main():
     model.to(config.device)
 
     train_dataloader = bps_datamodule.train_dataloader()
+    val_dataloader = bps_datamodule.val_dataloader()
+
+    model.eval()
+    
+################################# WANDB IS COOL #############################################
+
+    wandb.init(project="BPSResNet101",
+               dir=config.save_vis_dir,
+               config={
+                   "architecture": "ResNet101",
+                   "dataset": "BPS Microscopy Mouse Dataset",
+                   "learning rate": "0.001",
+                   "loss function": "Cross Entropy Loss",
+                   "optimizer": "Adam"})
+    
+    #cols = [f"out_{i}" for i in range(features.shape[1])]
+
 
     num_epochs = 11 # CHANGE TO MATCH DATA
 
     for epoch in range(num_epochs):
         model.train()
         running_loss = 0.0
-        for inputs, labels in train_dataloader:
-            inputs = inputs.to(config.device)
-            labels = labels.to(config.device)
+        for i, data in enumerate(train_dataloader, 0):
+            inputs, labels = data[0].to(config.device), data[1].to(config.device)
 
             optimizer.zero_grad()
             outputs = model(inputs)
@@ -224,133 +240,43 @@ def main():
 
             running_loss += loss.item()
 
+        wandb.log({"epoch": epoch, "loss": running_loss / len(train_dataloader)})
+
     model.eval()
-    
-    return
-    ##################################################################################################################################
-    ##################################################################################################################################
-    ##################################################################################################################################
-    
-    # Set the model to evaluation mode (no gradient calculation) since
-    # we are only interested in how the model perceives image features 
-    # and not the classification
-    model.eval()
-    
-    # Initialize lists to store the labels and features
-    labels = []
-    features_list = []
-    
-    # Iterate through the batches of images from the dataloader
-    for batch_idx, (image, target) in tqdm(enumerate(bps_datamodule.train_dataloader()), desc="Running model inference"):
-        # Move the tensors to GPU
-        image = image.to(config.device)
-        # Get the labels as a list
-        labels += target.tolist()
+    total = 0
+    correct = 0
 
-        # Forward pass through the model
-        output = model(image)
+    with torch.no_grad():
+        for i, data in enumerate(val_dataloader, 0):
+            images, labels = data[0].to(config.device), data[1].to(config.device)
+            outputs = model(images)
+            _, predicted = torch.max(outputs.data, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
 
-        # Move the tensors to CPU and convert to NumPy arrays
-        current_outputs = output.cpu().detach().numpy()
-        # Append the features from the current batch to the features from the previous batches
-        features_list.append(current_outputs)
-        # Convert the list of features to a NumPy array
-        features_np = np.array(features_list)
+    wandb.log({"epoch": epoch, "accuracy": 100 * correct / total})
 
-    # Uncomment if you would like the save the outputs 
-    # and labels of the Resnet101 
-    #np.save('resnet_features.npy', features)
-    #np.save('resnet_labels.npy', labels)
-
-    # Reshape features to have 2 dimensions
-    features = features_np.reshape(features_np.shape[0], -1)
-    print(f"features size: {features.shape}")
-
-
-    # Set the number of components set to 2 for a 2D scatterplot.
-    # Then set the number of points to plot to 1000.
-    # Then perform TSNE on the outputs of the Resnet101 model
-    n_components_2d = 2
-    num_points_to_plot = 1000
-    tsne_2d = perform_tsne(features, n_components_2d)
-   
-    # Convert the one hot encoded labels to a list of
-    # indices corresponding to the label value
-    indexed_labels = np.argmax(labels, axis=1)
-
-    # Create a Dataframe from to store the fitted TSNE components
-    cps2d_df = create_tsne_cp_df(tsne_2d, indexed_labels, num_points_to_plot)
-
-    # Define a filename for a 2D scatterplot
-    # Then call the 2D plot function from vis_utils.py
-    resnet_tsne_2d_png_fname = 'tsne_resnet_2d_4hr_Gy_hi'
-    plot_2D_scatter_plot(cps2d_df, resnet_tsne_2d_png_fname)
-   
-    # 3D TSNE w/ Scatterplot
-    # Set the number of components to 3 to construct a 3D graph
-    n_components_3d = 3
-    # Perform TSNE on the outputs of the Resnet101 model
-    tsne_3d = perform_tsne(features, n_components_3d)
-
-    # Create a Dataframe from to store the fitted TSNE components
-    cps3d_df = create_tsne_cp_df(tsne_3d, indexed_labels, num_points_to_plot)
-
-    # Define a filename for a 2D scatterplot
-    # Then call the 2D plot function from vis_utils.py
-    resnet_tsne_3d_png_fname = 'tsne_resnet_3d_4hr_Gy_hi'
-    plot_3D_scatter_plot(cps3d_df, resnet_tsne_3d_png_fname)
-    
-################################# WANDB IS COOL #############################################
-    # This section is a demo of the capabilities of Weights & Biases
-    # You do not need to change the code below, but you are encouraged to
-    # read through it and see what it does.
-
-    # You can also check out the documentation at https://docs.wandb.ai/
-    
-    # The goal of this section is to visualize the output of ResNet101
-    # which we intercepted prior to classification because we are interested
-    # in the feature representation that the model is learning (the learned
-    # patterns).
-
-    # Initialize a WandB project
-    # You will need to make an account with Weights & Biases (wandb.ai/site)
-    # Create a team and add your team members.
-    # WandB is free for all student accounts so please sign up with your school email
-    # If using VSCode, you will need to authenticate once by clicking the link
-    # in the terminal and pasting it in the browser upon the first run.
-    
-    # To initialize a project, you will need to create a project on wandb.ai
-    # Notice that the wandb.init() function takes in a project name and a descriptive
-    # config dictionary as well as a directory to save your results locally.
-    # The save directory will be named wandb and it will populate the wandb
-    # directory with directories for each run.
-    wandb.init(project="BPSResNet101",
-               dir=config.save_vis_dir,
-               config={
-                   "architecture": "ResNet101",
-                   "dataset": "BPS Microscopy Mouse Dataset"})
-    cols = [f"out_{i}" for i in range(features.shape[1])]
 
     # In this example we will take advantage of the WandB gui via the 
     # 2D Projections feature. This will require the output of our deep
     # learning model, the downsampled BPS images, formatted into a table
     # where each pixel is treated as a feature column. To do this we need
     # to create a features dataframe using pandas.
-    wb_df = pd.DataFrame(features, columns=cols)
-    wb_df['labels'] = labels
+    #wb_df = pd.DataFrame(features, columns=cols)
+    #wb_df['labels'] = labels
     # For the 'labels' column, we need to convert the one-hot encoded labels
     # to a single integer value. We can do this by using the argmax function.
-    wb_df['labels'] = wb_df['labels'].apply(lambda x: np.argmax(x))
+    #wb_df['labels'] = wb_df['labels'].apply(lambda x: np.argmax(x))
     # {0: 'Fe', 1: 'X-ray'}
-    print(wb_df.tail())
+    #print(wb_df.tail())
     # Create a wandb.Table object from the dataframe and column names
-    wb_table = wandb.Table(data=wb_df.values,
-                           columns=wb_df.columns.tolist())
+    #wb_table = wandb.Table(data=wb_df.values,
+                           #columns=wb_df.columns.tolist())
     # Log the table to wandb. You will use WandB's interactive GUI to 
     # visualize the logged table as a 2D Projection (a scatterplot),
     # simply by changing the output visualization from a table 
     # to a 2D Projection in the settings of the WandB table
-    wandb.log({"Gy_hi, hr_4" : wb_table})
+    #wandb.log({"Gy_hi, hr_4" : wb_table})
     # Close out the wandb run and sync the results to the cloud using
     # the wandb.finish() function.
     wandb.finish()
