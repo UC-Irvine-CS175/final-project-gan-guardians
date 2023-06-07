@@ -1,7 +1,8 @@
 [![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-24ddc0f5d75046c5622901739e7c5dd533143b0c8e959d652212380cedb1ea36.svg)](https://classroom.github.com/a/lzU1yAcG)
 # Getting Started: Downloading Data from the Cloud & PyTorch Custom Datasets, Transforms, and DataLoader
-## Ye Aung
-TODO - Update your name in this readme
+## Gan Guardians
+- Ye Aung
+- Arthur Hsu
 
 TODO - Add a badge to github actions here (see references for documentation).  
 ![Workflow Badge](https://github.com/UC-Irvine-CS175/download-dataset-augmentations-dataloader-ym-aung/actions/workflows/hw_dataset.yml/badge.svg)
