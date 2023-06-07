@@ -219,8 +219,8 @@ def main():
 
     # Uncomment if you would like the save the outputs 
     # and labels of the Resnet101 
-    #np.save('resnet_features.npy', features)
-    #np.save('resnet_labels.npy', labels)
+    np.save('resnet_features.npy', features)
+    np.save('resnet_labels.npy', labels)
 
     # Reshape features to have 2 dimensions
     features = features_np.reshape(features_np.shape[0], -1)
@@ -231,7 +231,7 @@ def main():
     # Then set the number of points to plot to 1000.
     # Then perform TSNE on the outputs of the Resnet101 model
     n_components_2d = 2
-    num_points_to_plot = 1000
+    num_points_to_plot = 1000 # change
     tsne_2d = perform_tsne(features, n_components_2d)
    
     # Convert the one hot encoded labels to a list of
