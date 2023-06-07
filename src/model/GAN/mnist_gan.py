@@ -60,7 +60,7 @@ class BPSConfig:
     save_vis_dir:       str = os.path.join(root, 'models', 'dummy_vis')
     save_models_dir:    str = os.path.join(root, 'models', 'baselines')
     batch_size:         int = 64
-    max_epochs:         int = 10
+    max_epochs:         int = 100
     accelerator:        str = 'auto'
     acc_devices:        int = 1
     device:             str = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -274,6 +274,10 @@ def main():
                    "architecture": "MNIST GAN",
                    "dataset": "BPS Microscopy"
                })
+    
+    # Load checkpoint if desired.
+    # https://pytorch-lightning.readthedocs.io/en/1.6.1/common/checkpointing.html
+
     
     # Create a GAN model.
     model = GAN(1, bps_datamodule.resize_dims[0],
