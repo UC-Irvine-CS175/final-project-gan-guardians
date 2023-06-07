@@ -209,11 +209,13 @@ def main():
     val_dataloader = bps_datamodule.val_dataloader()
 
     model.eval()
+
     
 ################################# WANDB IS COOL #############################################
 
     wandb.init(project="BPSResNet101",
                dir=config.save_vis_dir,
+               mode='online',
                config={
                    "architecture": "ResNet101",
                    "dataset": "BPS Microscopy Mouse Dataset",
@@ -224,7 +226,7 @@ def main():
     #cols = [f"out_{i}" for i in range(features.shape[1])]
 
 
-    num_epochs = 11 # CHANGE TO MATCH DATA
+    num_epochs = 1 # CHANGE TO MATCH DATA
 
     for epoch in range(num_epochs):
         model.train()
@@ -256,6 +258,10 @@ def main():
             wandb.log({"epoch": epoch, "accuracy": 100 * correct / config.batch_size})
 
 
+    # Save the model
+    # path = os.path.join(root, 'models', 'weights')
+    # torch.save(model.state_dict(), path)
+    
     # In this example we will take advantage of the WandB gui via the 
     # 2D Projections feature. This will require the output of our deep
     # learning model, the downsampled BPS images, formatted into a table
