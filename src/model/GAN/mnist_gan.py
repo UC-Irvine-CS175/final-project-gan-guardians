@@ -260,7 +260,7 @@ def main():
                                    train_dir=config.data_dir,
                                    val_csv_file=config.val_meta_fname,
                                    val_dir=config.data_dir,
-                                   resize_dims=(28, 28),
+                                   resize_dims=(224, 224),
                                    batch_size=config.batch_size,
                                    num_workers=config.num_workers)
     
