@@ -178,7 +178,7 @@ def main():
                                    train_dir=config.data_dir,
                                    val_csv_file=config.val_meta_fname,
                                    val_dir=config.data_dir,
-                                   resize_dims=(64, 64),
+                                   resize_dims=(224, 224),
                                    batch_size=config.batch_size,
                                    num_workers=config.num_workers)
     
@@ -226,7 +226,7 @@ def main():
     #cols = [f"out_{i}" for i in range(features.shape[1])]
 
 
-    num_epochs = 3 # CHANGE TO MATCH DATA
+    num_epochs = 1 # CHANGE TO MATCH DATA
 
     for epoch in range(num_epochs):
         model.train()
