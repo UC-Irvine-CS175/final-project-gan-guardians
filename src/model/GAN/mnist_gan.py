@@ -60,7 +60,7 @@ class BPSConfig:
     save_vis_dir:       str = os.path.join(root, 'models', 'dummy_vis')
     save_models_dir:    str = os.path.join(root, 'models', 'baselines')
     batch_size:         int = 64
-    max_epochs:         int = 100
+    max_epochs:         int = 10
     accelerator:        str = 'auto'
     acc_devices:        int = 1
     device:             str = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -68,7 +68,7 @@ class BPSConfig:
     dm_stage:           str = 'train'
 
 class Generator(nn.Module):
-    def __init__(self, latent_dim, img_shape):
+    def __init__(self, latent_dim, img_shape, pretrained, weights):
         super().__init__()
         self.img_shape = img_shape
 
@@ -89,6 +89,11 @@ class Generator(nn.Module):
             nn.Tanh(),
         )
 
+        # Load pretrained weights for generator.
+        if pretrained:
+            gen_weights = torch.load(weights, map_location='cpu' if not torch.cuda.is_available() else None)
+            self.model.load_state_dict(gen_weights, strict=True)
+
 
     def forward(self, z):
         img = self.model(z)
@@ -97,7 +102,7 @@ class Generator(nn.Module):
 
 
 class Discriminator(nn.Module):
-    def __init__(self, img_shape):
+    def __init__(self, img_shape, pretrained, weights):
         super().__init__()
 
         self.model = nn.Sequential(
@@ -108,6 +113,11 @@ class Discriminator(nn.Module):
             nn.Linear(256, 1),
             nn.Sigmoid(),
         )
+
+        # Load pretrained weights for discriminator.
+        if pretrained:
+            dis_weights = torch.load(weights, map_location='cpu' if not torch.cuda.is_available() else None)
+            self.model.load_state_dict(dis_weights, strict=True)
 
 
     def forward(self, img):
@@ -123,12 +133,15 @@ class GAN(L.LightningModule):
         channels,
         width,
         height,
-        gen_image_save_dir: str,
+        gen_image_save_dir,
+        g_weights_path: str = "",
+        d_weights_path: str = "",
+        pretrained: bool = False,
         latent_dim: int = 100,
         lr: float = 0.0002,
         b1: float = 0.5,
         b2: float = 0.999,
-        batch_size: int = 256,
+        batch_size: int = 256, 
         **kwargs,
     ):
         super().__init__()
@@ -137,9 +150,16 @@ class GAN(L.LightningModule):
 
         # networks
         data_shape = (channels, width, height)
-        self.generator = Generator(latent_dim=self.hparams.latent_dim, img_shape=data_shape)
-        self.discriminator = Discriminator(img_shape=data_shape)
+        self.generator = Generator(latent_dim=self.hparams.latent_dim, 
+                                   img_shape=data_shape,
+                                   pretrained=pretrained,
+                                   weights=g_weights_path)
+        
+        self.discriminator = Discriminator(img_shape=data_shape,
+                                           pretrained=pretrained,
+                                           weights=d_weights_path)
 
+        
         self.validation_z = torch.randn(8, self.hparams.latent_dim)
 
         self.example_input_array = torch.zeros(2, self.hparams.latent_dim)
@@ -234,13 +254,13 @@ class GAN(L.LightningModule):
 
     def on_train_epoch_end(self):
         # # Save the image
-        # z = self.validation_z.type_as(self.generator.model[0].weight)
-        # sample_imgs = self.generated_imgs[:6]
+        z = self.validation_z.type_as(self.generator.model[0].weight)
+        sample_imgs = self.generated_imgs[:6]
 
-        # img_transform = transforms.ToPILImage()
-        # img = img_transform(sample_imgs[0])
-        # img.save(os.path.join(self.gen_image_save_dir, 
-        #                       f'generated_bps_epoch_{self.current_epoch}.jpeg'))
+        img_transform = transforms.ToPILImage()
+        img = img_transform(sample_imgs[0])
+        img.save(os.path.join(self.gen_image_save_dir, 
+                              f'generated_bps_epoch_{self.current_epoch}.jpeg'))
         return super().on_train_epoch_end()
 
 
@@ -260,7 +280,7 @@ def main():
                                    train_dir=config.data_dir,
                                    val_csv_file=config.val_meta_fname,
                                    val_dir=config.data_dir,
-                                   resize_dims=(224, 224),
+                                   resize_dims=(28, 28),
                                    batch_size=config.batch_size,
                                    num_workers=config.num_workers)
     
@@ -269,6 +289,7 @@ def main():
 
     wandb.init(project="MNIST-GAN",
                dir=config.save_vis_dir,
+               mode="disabled",
                config=
                {
                    "architecture": "MNIST GAN",
@@ -278,12 +299,38 @@ def main():
     # Load checkpoint if desired.
     # https://pytorch-lightning.readthedocs.io/en/1.6.1/common/checkpointing.html
 
+    # Path to pretrained weights.
+    #pth_pretrained_weights = os.path.join(root, "models", "weights", "biggan-deep-128-pytorch_model.bin")
+    #state_dict = torch.load(pth_pretrained_weights, map_location='cpu' if not torch.cuda.is_available() else None)
     
     # Create a GAN model.
-    model = GAN(1, bps_datamodule.resize_dims[0],
+    # model = GAN(1, bps_datamodule.resize_dims[0],
+    #             bps_datamodule.resize_dims[1],
+    #             batch_size=config.batch_size,
+    #             gen_image_save_dir=config.gen_image_save_dir,
+    #             transfer_learning=False)
+    
+    #model.load_state_dict(state_dict, strict=False)
+    g_weights_path = os.path.join(root, 'models', 'weights', 'netG_epoch_99.pth')
+    d_weights_path = os.path.join(root, 'models', 'weights', 'netD_epoch_99.pth')
+    model2 = GAN(1, bps_datamodule.resize_dims[0],
                 bps_datamodule.resize_dims[1],
                 batch_size=config.batch_size,
-                gen_image_save_dir=config.gen_image_save_dir)
+                gen_image_save_dir=config.gen_image_save_dir,
+                transfer_learning=True,
+                g_weights_path=g_weights_path,
+                d_weights_path=d_weights_path)
+    
+    
+    # print("Model 1:")
+    # for param in model.named_parameters():
+    #     print(f"     {param}")
+    #     break
+    # print("\n\n\n")
+    # print("Model 2:")
+    # for param in model2.named_parameters():
+    #     print(f"     {param}")
+    #     break
     
     # Create a PyTorch Lightning trainer.
     trainer = L.Trainer(
@@ -292,7 +339,7 @@ def main():
         max_epochs=config.max_epochs,
     )
     # Train the model.
-    trainer.fit(model, bps_datamodule.train_dataloader(), )
+    trainer.fit(model2, bps_datamodule.train_dataloader(), )
     wandb.finish()
 
 if __name__ == '__main__':
