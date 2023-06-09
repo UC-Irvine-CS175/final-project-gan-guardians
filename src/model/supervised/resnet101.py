@@ -37,8 +37,7 @@ from src.dataset.augmentation import(
     ToTensor
 )
 from src.vis_utils import(
-    plot_2D_scatter_plot,
-    plot_3D_scatter_plot,
+    show_label_batch
 )
 
 @dataclass
@@ -83,8 +82,8 @@ class BPSConfig:
     val_meta_fname:     str = 'meta_dose_hi_hr_4_post_exposure_test.csv'
     save_vis_dir:       str = root / 'models' / 'dummy_vis'
     save_models_dir:    str = root / 'models' / 'baselines'
-    batch_size:         int = 1
-    max_epochs:         int = 3
+    batch_size:         int = 4
+    max_epochs:         int = 20
     accelerator:        str = 'auto'
     acc_devices:        int = 1
     device:             str = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -101,7 +100,10 @@ class ResNet101(resnet.ResNet):
     convolutional layer to investigate the features that the model has learned on the
     BPS dataset.
     """
-    def __init__(self, num_classes=1000, pretrained=True, **kwargs):
+    def __init__(self, num_classes=1000, pretrained=True, 
+                 pre_weights=None, 
+                 **kwargs):
+        
         # Start with the standard resnet101
         super().__init__(
             block=Bottleneck,
@@ -110,11 +112,12 @@ class ResNet101(resnet.ResNet):
             **kwargs
         )
         if pretrained:
-            state_dict = load_state_dict_from_url(
-                "https://download.pytorch.org/models/resnet101-5d3b4d8f.pth",
-                progress=True
-            )
-            self.load_state_dict(state_dict)
+            if pre_weights:
+                self.load_state_dict(torch.load(os.path.join(root, 'src', 'model', 'supervised', 'weights', 'resnet_weights.pth')))
+            else:
+                state_dict = load_state_dict_from_url("https://download.pytorch.org/models/resnet101-5d3b4d8f.pth",
+                                                      progress=True)
+                self.load_state_dict(state_dict)
  
     def _forward_impl(self, x):
         # Resnet101 originally takes 3 channel images for classification
@@ -161,7 +164,6 @@ class ResNet101(resnet.ResNet):
         return x
     
 def main():
-
     wandb.login()
 
     # Initialize a BPSConfig object
@@ -186,9 +188,14 @@ def main():
     bps_datamodule.setup(stage="train")
     bps_datamodule.setup(stage="validate")
 
-    
+    ### PRETRAINED WEIGHTS ###
+    pretrained_weights_path = None
+
+    if pretrained_weights_path:
+        model = ResNet101(num_classes=2, pretrained=True)
     # Initialize pretrained ResNet101 model
-    model = ResNet101(pretrained=True)
+    else:
+        model = ResNet101(pretrained=True)
 
     # we need to freeze parameters so that pretrained layers aren't modified
     for param in model.parameters():
@@ -212,10 +219,9 @@ def main():
 
     
 ################################# WANDB IS COOL #############################################
-
+    
     wandb.init(project="BPSResNet101",
                dir=config.save_vis_dir,
-               #mode='online',
                config={
                    "architecture": "ResNet101",
                    "dataset": "BPS Microscopy Mouse Dataset",
@@ -223,67 +229,51 @@ def main():
                    "loss function": "Cross Entropy Loss",
                    "optimizer": "Adam"})
     
-    #cols = [f"out_{i}" for i in range(features.shape[1])]
 
 
-    num_epochs = 1 # CHANGE TO MATCH DATA
+    num_epochs = config.max_epochs # CHANGE CONFIG
 
-    for epoch in range(num_epochs):
-        model.train()
-        running_loss = 0.0
-        for i, data in enumerate(train_dataloader, 0):
-            inputs, labels = data[0].to(config.device), data[1].to(config.device)
 
-            optimizer.zero_grad()
-            outputs = model(inputs)
-            loss = loss_func(outputs, labels)
-            loss.backward()
-            optimizer.step()
+    if pretrained_weights_path == None:
+        for epoch in range(num_epochs):
+            model.train()
+            running_loss = 0.0
+            for i, data in enumerate(train_dataloader, 0):
+                inputs, labels = data[0].to(config.device), data[1].to(config.device)
 
-            running_loss += loss.item()
+                optimizer.zero_grad()
+                outputs = model(inputs)
+                loss = loss_func(outputs, labels)
+                loss.backward()
+                optimizer.step()
 
-        wandb.log({"epoch": epoch, "loss": running_loss / len(train_dataloader)})
+                running_loss += loss.item()
+
+            wandb.log({"epoch": epoch, "loss": running_loss / len(train_dataloader)})
 
     model.eval()
-    total = 0
-    correct = 0
 
+    correct = 0
+    total = 0
     with torch.no_grad():
         for i, data in enumerate(val_dataloader, 0):
             images, labels = data[0].to(config.device), data[1].to(config.device)
             outputs = model(images)
-            _, predicted = torch.max(outputs.data, 1)
-            # total += labels.size(0)
-            correct += (predicted == labels).sum().item()
-            wandb.log({"epoch": epoch, "accuracy": 100 * correct / config.batch_size})
-
+            predicted = (outputs == torch.max(outputs, dim=1, keepdim=True)[0]).float()
+            result = []
+            for r1, r2 in zip(predicted, labels):
+                result.append(int(torch.equal(r1, r2)))
+            correct += sum(result)
+            total += config.batch_size
+    wandb.log({"accuracy": correct / total})
 
     # Save the model
-    path = os.path.join(root, 'models', 'weights', 'resnet_weights.pth')
-    torch.save(model.state_dict(), path)
+    save = False
+    # CHANGE THE PATH WHEN SAVING NEW MODEL
+    if save:
+        path = os.path.join(root, 'src', 'model', 'supervised', 'weights', 'resnet_weights2.pth')
+        torch.save(model.state_dict(), path)
     
-    # In this example we will take advantage of the WandB gui via the 
-    # 2D Projections feature. This will require the output of our deep
-    # learning model, the downsampled BPS images, formatted into a table
-    # where each pixel is treated as a feature column. To do this we need
-    # to create a features dataframe using pandas.
-    #wb_df = pd.DataFrame(features, columns=cols)
-    #wb_df['labels'] = labels
-    # For the 'labels' column, we need to convert the one-hot encoded labels
-    # to a single integer value. We can do this by using the argmax function.
-    #wb_df['labels'] = wb_df['labels'].apply(lambda x: np.argmax(x))
-    # {0: 'Fe', 1: 'X-ray'}
-    #print(wb_df.tail())
-    # Create a wandb.Table object from the dataframe and column names
-    #wb_table = wandb.Table(data=wb_df.values,
-                           #columns=wb_df.columns.tolist())
-    # Log the table to wandb. You will use WandB's interactive GUI to 
-    # visualize the logged table as a 2D Projection (a scatterplot),
-    # simply by changing the output visualization from a table 
-    # to a 2D Projection in the settings of the WandB table
-    #wandb.log({"Gy_hi, hr_4" : wb_table})
-    # Close out the wandb run and sync the results to the cloud using
-    # the wandb.finish() function.
     wandb.finish()
     
 #############################################################################
