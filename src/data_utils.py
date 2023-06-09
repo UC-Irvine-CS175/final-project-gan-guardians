@@ -286,7 +286,26 @@ def train_test_split_subset_meta_dose_hr(
     # return the train and test csv paths
 
     return train_file_path, test_file_path
-    
+
+
+def seperate_particle_type(subset_meta_dose_hr_csv_path: str,
+                           save_dir: str):
+    """
+    Seperate the Fe and X-ray particle type into seperate csv files.
+
+    subset_meta_dose_hr_csv_path: str = The csv file to be split by particle type.
+    save_dir: str = where to save the new csv files.
+    """
+    dataframe = pd.read_csv(subset_meta_dose_hr_csv_path)
+
+    sliced_df_Fe = (dataframe["particle_type"] == "Fe")
+    sliced_df_X_ray = (dataframe["particle_type"] == "X-ray")
+
+    file_prefix = os.path.splitext(os.path.basename(subset_meta_dose_hr_csv_path))[0]
+    Fe_filename = f"{file_prefix}_Fe.csv"
+    Xray_filename = f"{file_prefix}_X_ray.csv"
+    dataframe[sliced_df_Fe].to_csv(os.path.join(save_dir, Fe_filename))
+    dataframe[sliced_df_X_ray].to_csv(os.path.join(save_dir, Xray_filename))
 
 def main():
     """
@@ -295,6 +314,7 @@ def main():
 
     output_dir = '../data/processed'
 
+    """
     # s3 bucket info
     bucket_name = 'nasa-bps-training-data'
     s3_path = 'Microscopy/train'
@@ -322,9 +342,11 @@ def main():
         out_dir_csv=output_dir,
         random_state=42,
         stratify_col="particle_type")
-
+    """
     val_save_file_path = pyprojroot.here()/'data'/'processed'
     val_path_fname = val_save_file_path/'meta_dose_hi_hr_4_post_exposure_test.csv'
+    
+    seperate_particle_type(val_path_fname, val_save_file_path)
 
 
 if __name__ == "__main__":

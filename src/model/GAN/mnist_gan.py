@@ -13,6 +13,7 @@ import torchvision
 import torchvision.transforms as transforms
 from PIL import Image
 from torch.utils.data import DataLoader, random_split
+from torch.autograd import Variable
 import wandb
 from src.dataset.bps_datamodule import BPSDataModule
 
@@ -55,12 +56,22 @@ class BPSConfig:
     """
     data_dir:           str = os.path.join(root,'data','processed')
     gen_image_save_dir: str = os.path.join(root, 'data', 'generated')
+    
+    fe_img_save_dir:    str = os.path.join(root, 'data', 'generated', 'Fe')
+    xray_img_save_dir:  str = os.path.join(root, 'data', 'generated', 'Xray')
+    
     train_meta_fname:   str = 'meta_dose_hi_hr_4_post_exposure_train.csv'
+    fe_train_meta:      str = 'meta_dose_hi_hr_4_post_exposure_train_Fe.csv'
+    xray_train_meta:    str = 'meta_dose_hi_hr_4_post_exposure_train_Xray.csv'
+
     val_meta_fname:     str = 'meta_dose_hi_hr_4_post_exposure_test.csv'
+    fe_test_meta:      str = 'meta_dose_hi_hr_4_post_exposure_test_Fe.csv'
+    xray_test_meta:    str = 'meta_dose_hi_hr_4_post_exposure_test_Xray.csv'
+    
     save_vis_dir:       str = os.path.join(root, 'models', 'dummy_vis')
     save_models_dir:    str = os.path.join(root, 'models', 'baselines')
     batch_size:         int = 64
-    max_epochs:         int = 10
+    max_epochs:         int = 100
     accelerator:        str = 'auto'
     acc_devices:        int = 1
     device:             str = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -68,7 +79,7 @@ class BPSConfig:
     dm_stage:           str = 'train'
 
 class Generator(nn.Module):
-    def __init__(self, latent_dim, img_shape, pretrained, weights):
+    def __init__(self, latent_dim, img_shape):
         super().__init__()
         self.img_shape = img_shape
 
@@ -80,6 +91,7 @@ class Generator(nn.Module):
             layers.append(nn.LeakyReLU(0.2, inplace=True))
             return layers
 
+
         self.model = nn.Sequential(
             *block(latent_dim, 128, normalize=False),
             *block(128, 256),
@@ -89,11 +101,6 @@ class Generator(nn.Module):
             nn.Tanh(),
         )
 
-        # Load pretrained weights for generator.
-        if pretrained:
-            gen_weights = torch.load(weights, map_location='cpu' if not torch.cuda.is_available() else None)
-            self.model.load_state_dict(gen_weights, strict=True)
-
 
     def forward(self, z):
         img = self.model(z)
@@ -102,7 +109,7 @@ class Generator(nn.Module):
 
 
 class Discriminator(nn.Module):
-    def __init__(self, img_shape, pretrained, weights):
+    def __init__(self, img_shape):
         super().__init__()
 
         self.model = nn.Sequential(
@@ -110,14 +117,10 @@ class Discriminator(nn.Module):
             nn.LeakyReLU(0.2, inplace=True),
             nn.Linear(512, 256),
             nn.LeakyReLU(0.2, inplace=True),
+            nn.Dropout(0.4),
             nn.Linear(256, 1),
             nn.Sigmoid(),
         )
-
-        # Load pretrained weights for discriminator.
-        if pretrained:
-            dis_weights = torch.load(weights, map_location='cpu' if not torch.cuda.is_available() else None)
-            self.model.load_state_dict(dis_weights, strict=True)
 
 
     def forward(self, img):
@@ -134,9 +137,6 @@ class GAN(L.LightningModule):
         width,
         height,
         gen_image_save_dir,
-        g_weights_path: str = "",
-        d_weights_path: str = "",
-        pretrained: bool = False,
         latent_dim: int = 100,
         lr: float = 0.0002,
         b1: float = 0.5,
@@ -151,14 +151,9 @@ class GAN(L.LightningModule):
         # networks
         data_shape = (channels, width, height)
         self.generator = Generator(latent_dim=self.hparams.latent_dim, 
-                                   img_shape=data_shape,
-                                   pretrained=pretrained,
-                                   weights=g_weights_path)
-        
-        self.discriminator = Discriminator(img_shape=data_shape,
-                                           pretrained=pretrained,
-                                           weights=d_weights_path)
+                                   img_shape=data_shape)
 
+        self.discriminator = Discriminator(img_shape=data_shape)
         
         self.validation_z = torch.randn(8, self.hparams.latent_dim)
 
@@ -166,8 +161,8 @@ class GAN(L.LightningModule):
 
         # Save directory of the generated images after each epoch.
         self.gen_image_save_dir = gen_image_save_dir
-
-
+    
+    
     def forward(self, z):
         return self.generator(z)
 
@@ -249,13 +244,18 @@ class GAN(L.LightningModule):
 
         opt_g = torch.optim.Adam(self.generator.parameters(), lr=lr, betas=(b1, b2))
         opt_d = torch.optim.Adam(self.discriminator.parameters(), lr=lr, betas=(b1, b2))
+        
+        # if self.pretrained:
+        #     opt_g.load_state_dict(self.generator.g_checkpoint['optimizer_state_dict'])
+        #     opt_d.load_state_dict(self.discriminator.d_checkpoint['optimizer_state_dict'])
+        
         return opt_g, opt_d
 
 
     def on_train_epoch_end(self):
         # # Save the image
         z = self.validation_z.type_as(self.generator.model[0].weight)
-        sample_imgs = self.generated_imgs[:6]
+        sample_imgs = self(z)
 
         img_transform = transforms.ToPILImage()
         img = img_transform(sample_imgs[0])
@@ -273,23 +273,36 @@ class GAN(L.LightningModule):
         self.logger.experiment.add_image("generated_images", grid, self.current_epoch)
 
 
+def create_images(model, num_images, particle_type):
+    """
+    Give a gan model, produce num_images amount of images.
+    """
+    for i in range(num_images):
+        z = torch.randn(128, model.hparams.latent_dim)
+        image = model(z)[0]
+        print(image)
+        img_transform = transforms.ToPILImage()
+        img = img_transform(image)
+        img.save(os.path.join(f'gen_{particle_type}_data_{i}.jpeg'))
+
+
 def main():
     config = BPSConfig()
-    # Instantiate BPSDataModule
-    bps_datamodule = BPSDataModule(train_csv_file=config.train_meta_fname,
+    # Instantiate BPSDataModule (Fe)
+    Fe_bps_datamodule = BPSDataModule(train_csv_file=config.fe_train_meta,
                                    train_dir=config.data_dir,
-                                   val_csv_file=config.val_meta_fname,
+                                   val_csv_file=config.fe_test_meta,
                                    val_dir=config.data_dir,
-                                   resize_dims=(28, 28),
+                                   resize_dims=(128, 128),
                                    batch_size=config.batch_size,
                                    num_workers=config.num_workers)
     
     # Using BPSDataModule's setup, define the stage name ('train' or 'val')
-    bps_datamodule.setup(stage=config.dm_stage)
+    Fe_bps_datamodule.setup(stage=config.dm_stage)
 
     wandb.init(project="MNIST-GAN",
                dir=config.save_vis_dir,
-               mode="disabled",
+               name="Fe-train",
                config=
                {
                    "architecture": "MNIST GAN",
@@ -299,48 +312,61 @@ def main():
     # Load checkpoint if desired.
     # https://pytorch-lightning.readthedocs.io/en/1.6.1/common/checkpointing.html
 
-    # Path to pretrained weights.
-    #pth_pretrained_weights = os.path.join(root, "models", "weights", "biggan-deep-128-pytorch_model.bin")
-    #state_dict = torch.load(pth_pretrained_weights, map_location='cpu' if not torch.cuda.is_available() else None)
-    
     # Create a GAN model.
-    # model = GAN(1, bps_datamodule.resize_dims[0],
-    #             bps_datamodule.resize_dims[1],
-    #             batch_size=config.batch_size,
-    #             gen_image_save_dir=config.gen_image_save_dir,
-    #             transfer_learning=False)
-    
-    #model.load_state_dict(state_dict, strict=False)
-    g_weights_path = os.path.join(root, 'models', 'weights', 'netG_epoch_99.pth')
-    d_weights_path = os.path.join(root, 'models', 'weights', 'netD_epoch_99.pth')
-    model2 = GAN(1, bps_datamodule.resize_dims[0],
-                bps_datamodule.resize_dims[1],
+    #checkpoint = os.path.join(root, 'models', 'weights', 'epoch=99-step=22200.ckpt')
+    Fe_model = GAN(1, Fe_bps_datamodule.resize_dims[0],
+                Fe_bps_datamodule.resize_dims[1],
                 batch_size=config.batch_size,
-                gen_image_save_dir=config.gen_image_save_dir,
-                transfer_learning=True,
-                g_weights_path=g_weights_path,
-                d_weights_path=d_weights_path)
-    
-    
-    # print("Model 1:")
-    # for param in model.named_parameters():
-    #     print(f"     {param}")
-    #     break
-    # print("\n\n\n")
-    # print("Model 2:")
-    # for param in model2.named_parameters():
-    #     print(f"     {param}")
-    #     break
+                gen_image_save_dir=config.gen_image_save_dir)
     
     # Create a PyTorch Lightning trainer.
-    trainer = L.Trainer(
+    Fe_trainer = L.Trainer(
         accelerator=config.accelerator,
         devices=config.acc_devices,
         max_epochs=config.max_epochs,
     )
     # Train the model.
-    trainer.fit(model2, bps_datamodule.train_dataloader(), )
+    Fe_trainer.fit(Fe_model, Fe_bps_datamodule.train_dataloader(), )
+    create_images(model=Fe_model, num_images=1, particle_type='Fe')
     wandb.finish()
+
+    # wandb.init(project="MNIST-GAN",
+    #            dir=config.save_vis_dir,
+    #            name="X_ray-train",
+    #            config=
+    #            {
+    #                "architecture": "MNIST GAN",
+    #                "dataset": "BPS Microscopy"
+    #            })
+
+    # # Instantiate BPSDataModule (Xray)
+    # Xray_bps_datamodule = BPSDataModule(train_csv_file=config.xray_train_meta,
+    #                                train_dir=config.data_dir,
+    #                                val_csv_file=config.xray_test_meta,
+    #                                val_dir=config.data_dir,
+    #                                resize_dims=(128, 128),
+    #                                batch_size=config.batch_size,
+    #                                num_workers=config.num_workers)
+    
+    # # Using BPSDataModule's setup, define the stage name ('train' or 'val')
+    # Xray_bps_datamodule.setup(stage=config.dm_stage)
+
+    # Xray_model = GAN(1, Xray_bps_datamodule.resize_dims[0],
+    #             Xray_bps_datamodule.resize_dims[1],
+    #             batch_size=config.batch_size,
+    #             gen_image_save_dir=config.gen_image_save_dir)
+    
+    # # Create a PyTorch Lightning trainer.
+    # Xray_trainer = L.Trainer(
+    #     accelerator=config.accelerator,
+    #     devices=config.acc_devices,
+    #     max_epochs=config.max_epochs,
+    # )
+    
+    # # Train the model.
+    # Xray_trainer.fit(Xray_model, Xray_bps_datamodule.train_dataloader(), )
+    # create_images(model=Xray_model, num_images=1, particle_type='Xray')
+    # wandb.finish()
 
 if __name__ == '__main__':
     main()
