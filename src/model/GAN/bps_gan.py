@@ -71,7 +71,7 @@ class BPSConfig:
     save_vis_dir:       str = os.path.join(root, 'models', 'dummy_vis')
     save_models_dir:    str = os.path.join(root, 'models', 'baselines')
     batch_size:         int = 64
-    max_epochs:         int = 100
+    max_epochs:         int = 220
     accelerator:        str = 'auto'
     acc_devices:        int = 1
     device:             str = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -302,7 +302,7 @@ def main():
 
     wandb.init(project="MNIST-GAN",
                dir=config.save_vis_dir,
-               name="Fe-train",
+               name="Fe-train-700-epochs",
                config=
                {
                    "architecture": "MNIST GAN",
@@ -313,11 +313,11 @@ def main():
     # https://pytorch-lightning.readthedocs.io/en/1.6.1/common/checkpointing.html
 
     # Create a GAN model.
-    #checkpoint = os.path.join(root, 'models', 'weights', 'epoch=99-step=22200.ckpt')
+    checkpoint = os.path.join(root, 'models', 'weights', 'epoch=480-step=11200.ckpt')
     Fe_model = GAN(1, Fe_bps_datamodule.resize_dims[0],
                 Fe_bps_datamodule.resize_dims[1],
                 batch_size=config.batch_size,
-                gen_image_save_dir=config.gen_image_save_dir)
+                gen_image_save_dir=config.gen_image_save_dir).load_from_checkpoint(checkpoint)
     
     # Create a PyTorch Lightning trainer.
     Fe_trainer = L.Trainer(
