@@ -1,4 +1,4 @@
-# nmist_gan.py
+# bps_gan.py
 
 ## 1. BPSConfig 
 This is a data class that holds all the configuration options for the BPS Microscopy 
