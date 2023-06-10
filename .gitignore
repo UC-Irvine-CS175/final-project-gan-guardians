@@ -1,8 +1,10 @@
 # directories
 src/model/solutions
 data/raw
+data/generated
 data/processed/*.tif
 src/model/wandb
+lightning_logs
 
 models/dummy_vis
 models/wandb
