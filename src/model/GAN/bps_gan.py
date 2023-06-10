@@ -62,16 +62,16 @@ class BPSConfig:
     
     train_meta_fname:   str = 'meta_dose_hi_hr_4_post_exposure_train.csv'
     fe_train_meta:      str = 'meta_dose_hi_hr_4_post_exposure_train_Fe.csv'
-    xray_train_meta:    str = 'meta_dose_hi_hr_4_post_exposure_train_Xray.csv'
+    xray_train_meta:    str = 'meta_dose_hi_hr_4_post_exposure_train_X_ray.csv'
 
     val_meta_fname:     str = 'meta_dose_hi_hr_4_post_exposure_test.csv'
     fe_test_meta:      str = 'meta_dose_hi_hr_4_post_exposure_test_Fe.csv'
-    xray_test_meta:    str = 'meta_dose_hi_hr_4_post_exposure_test_Xray.csv'
+    xray_test_meta:    str = 'meta_dose_hi_hr_4_post_exposure_test_X_ray.csv'
     
     save_vis_dir:       str = os.path.join(root, 'models', 'dummy_vis')
     save_models_dir:    str = os.path.join(root, 'models', 'baselines')
     batch_size:         int = 64
-    max_epochs:         int = 220
+    max_epochs:         int = 800
     accelerator:        str = 'auto'
     acc_devices:        int = 1
     device:             str = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -289,84 +289,84 @@ def create_images(model, num_images, particle_type):
 def main():
     config = BPSConfig()
     # Instantiate BPSDataModule (Fe)
-    Fe_bps_datamodule = BPSDataModule(train_csv_file=config.fe_train_meta,
-                                   train_dir=config.data_dir,
-                                   val_csv_file=config.fe_test_meta,
-                                   val_dir=config.data_dir,
-                                   resize_dims=(128, 128),
-                                   batch_size=config.batch_size,
-                                   num_workers=config.num_workers)
-    
-    # Using BPSDataModule's setup, define the stage name ('train' or 'val')
-    Fe_bps_datamodule.setup(stage=config.dm_stage)
-
-    wandb.init(project="MNIST-GAN",
-               dir=config.save_vis_dir,
-               name="Fe-train-700-epochs",
-               config=
-               {
-                   "architecture": "MNIST GAN",
-                   "dataset": "BPS Microscopy"
-               })
-    
-    # Load checkpoint if desired.
-    # https://pytorch-lightning.readthedocs.io/en/1.6.1/common/checkpointing.html
-
-    # Create a GAN model.
-    checkpoint = os.path.join(root, 'models', 'weights', 'epoch=480-step=11200.ckpt')
-    Fe_model = GAN(1, Fe_bps_datamodule.resize_dims[0],
-                Fe_bps_datamodule.resize_dims[1],
-                batch_size=config.batch_size,
-                gen_image_save_dir=config.gen_image_save_dir).load_from_checkpoint(checkpoint)
-    
-    # Create a PyTorch Lightning trainer.
-    Fe_trainer = L.Trainer(
-        accelerator=config.accelerator,
-        devices=config.acc_devices,
-        max_epochs=config.max_epochs,
-    )
-    # Train the model.
-    Fe_trainer.fit(Fe_model, Fe_bps_datamodule.train_dataloader(), )
-    create_images(model=Fe_model, num_images=1, particle_type='Fe')
-    wandb.finish()
-
-    # wandb.init(project="MNIST-GAN",
-    #            dir=config.save_vis_dir,
-    #            name="X_ray-train",
-    #            config=
-    #            {
-    #                "architecture": "MNIST GAN",
-    #                "dataset": "BPS Microscopy"
-    #            })
-
-    # # Instantiate BPSDataModule (Xray)
-    # Xray_bps_datamodule = BPSDataModule(train_csv_file=config.xray_train_meta,
+    # Fe_bps_datamodule = BPSDataModule(train_csv_file=config.fe_train_meta,
     #                                train_dir=config.data_dir,
-    #                                val_csv_file=config.xray_test_meta,
+    #                                val_csv_file=config.fe_test_meta,
     #                                val_dir=config.data_dir,
     #                                resize_dims=(128, 128),
     #                                batch_size=config.batch_size,
     #                                num_workers=config.num_workers)
     
     # # Using BPSDataModule's setup, define the stage name ('train' or 'val')
-    # Xray_bps_datamodule.setup(stage=config.dm_stage)
+    # Fe_bps_datamodule.setup(stage=config.dm_stage)
 
-    # Xray_model = GAN(1, Xray_bps_datamodule.resize_dims[0],
-    #             Xray_bps_datamodule.resize_dims[1],
+    # wandb.init(project="MNIST-GAN",
+    #            dir=config.save_vis_dir,
+    #            name="Fe-train-700-epochs",
+    #            config=
+    #            {
+    #                "architecture": "MNIST GAN",
+    #                "dataset": "BPS Microscopy"
+    #            })
+    
+    # # Load checkpoint if desired.
+    # # https://pytorch-lightning.readthedocs.io/en/1.6.1/common/checkpointing.html
+
+    # # Create a GAN model.
+    # checkpoint = os.path.join(root, 'models', 'weights', 'epoch=480-step=11200.ckpt')
+    # Fe_model = GAN(1, Fe_bps_datamodule.resize_dims[0],
+    #             Fe_bps_datamodule.resize_dims[1],
     #             batch_size=config.batch_size,
-    #             gen_image_save_dir=config.gen_image_save_dir)
+    #             gen_image_save_dir=config.gen_image_save_dir).load_from_checkpoint(checkpoint)
     
     # # Create a PyTorch Lightning trainer.
-    # Xray_trainer = L.Trainer(
+    # Fe_trainer = L.Trainer(
     #     accelerator=config.accelerator,
     #     devices=config.acc_devices,
     #     max_epochs=config.max_epochs,
     # )
-    
     # # Train the model.
-    # Xray_trainer.fit(Xray_model, Xray_bps_datamodule.train_dataloader(), )
-    # create_images(model=Xray_model, num_images=1, particle_type='Xray')
+    # Fe_trainer.fit(Fe_model, Fe_bps_datamodule.train_dataloader(), )
+    # create_images(model=Fe_model, num_images=1, particle_type='Fe')
     # wandb.finish()
+
+    wandb.init(project="MNIST-GAN",
+               dir=config.save_vis_dir,
+               name="X_ray-train",
+               config=
+               {
+                   "architecture": "MNIST GAN",
+                   "dataset": "BPS Microscopy"
+               })
+
+    # Instantiate BPSDataModule (Xray)
+    Xray_bps_datamodule = BPSDataModule(train_csv_file=config.xray_train_meta,
+                                   train_dir=config.data_dir,
+                                   val_csv_file=config.xray_test_meta,
+                                   val_dir=config.data_dir,
+                                   resize_dims=(128, 128),
+                                   batch_size=config.batch_size,
+                                   num_workers=config.num_workers)
+    
+    # Using BPSDataModule's setup, define the stage name ('train' or 'val')
+    Xray_bps_datamodule.setup(stage=config.dm_stage)
+
+    Xray_model = GAN(1, Xray_bps_datamodule.resize_dims[0],
+                Xray_bps_datamodule.resize_dims[1],
+                batch_size=config.batch_size,
+                gen_image_save_dir=config.gen_image_save_dir)
+    
+    # Create a PyTorch Lightning trainer.
+    Xray_trainer = L.Trainer(
+        accelerator=config.accelerator,
+        devices=config.acc_devices,
+        max_epochs=config.max_epochs,
+    )
+    
+    # Train the model.
+    Xray_trainer.fit(Xray_model, Xray_bps_datamodule.train_dataloader(), )
+    create_images(model=Xray_model, num_images=1, particle_type='Xray')
+    wandb.finish()
 
 if __name__ == '__main__':
     main()
