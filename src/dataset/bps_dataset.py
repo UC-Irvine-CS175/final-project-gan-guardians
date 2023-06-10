@@ -157,15 +157,16 @@ class BPSMouseDataset(torch.utils.data.Dataset):
             img_array = self.transform(img_array)
 
         # Fetch one hot encoded labels for all classes of particle_type as a Series
-        particle_type_tensor = row[['particle_type_Fe', 'particle_type_X-ray']]
+        # particle_type_tensor = row[['particle_type_Fe', 'particle_type_X-ray']]
 
-        # Convert Series to numpy array
-        particle_type_tensor = particle_type_tensor.to_numpy().astype(np.bool_)
+        # # Convert Series to numpy array
+        # particle_type_tensor = particle_type_tensor.to_numpy().astype(np.bool_)
         
-        # Convert One Hot Encoded labels to tensor
-        particle_type_tensor = torch.from_numpy(particle_type_tensor)
-        # Convert tensor data type to Float
-        particle_type_tensor = particle_type_tensor.type(torch.FloatTensor)
+        # # Convert One Hot Encoded labels to tensor
+        # particle_type_tensor = torch.from_numpy(particle_type_tensor)
+        # # Convert tensor data type to Float
+        # particle_type_tensor = particle_type_tensor.type(torch.FloatTensor)
+        particle_type_tensor = torch.tensor(1)
         
 
         # return the image and associated label
