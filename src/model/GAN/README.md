@@ -5,8 +5,8 @@ This is a data class that holds all the configuration options for the BPS Micros
 dataset. It defines various directory and file names as paths, batch sizes as the numbers 
 of images per batch, max number of epochs, type of accelerators (to use for training), and
 other parameters related to hardware training settings, as well as the dm_state which sets
-the partition of data into either train, val, or test. Right now the number of epochs is 
-100 but it might benefit from another 100 epochs so we are testing with 200 epochs too.
+the partition of data into either train, val, or test. As of now we are using 800 epochs 
+in the code that we ran.
 
 
 ## 2. Generator 
