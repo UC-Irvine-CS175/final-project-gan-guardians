@@ -22,6 +22,7 @@ from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
 
 import torch
+import torchvision
 from dataclasses import dataclass
 from torchvision.models import resnet
 from torchvision.models.resnet import Bottleneck
@@ -37,7 +38,8 @@ from src.dataset.augmentation import(
     ToTensor
 )
 from src.vis_utils import(
-    show_label_batch
+    show_label_batch,
+    show_image_and_label
 )
 
 @dataclass
@@ -80,9 +82,11 @@ class BPSConfig:
     data_dir:           str = root / 'data' / 'processed'
     train_meta_fname:   str = 'meta_dose_hi_hr_4_post_exposure_train.csv'
     val_meta_fname:     str = 'meta_dose_hi_hr_4_post_exposure_test.csv'
-    save_vis_dir:       str = root / 'models' / 'dummy_vis'
-    save_models_dir:    str = root / 'models' / 'baselines'
-    batch_size:         int = 4
+    save_vis_dir:       str = root / 'src' / 'model' /'supervised' / 'visuals'
+    save_models_dir:    str = root / 'src' / 'model' /'supervised' / 'weights' / 'resnet_run_10_20_1.pth' # CHANGE IF YOU WANT TO SAVE NEW WEIGHTS
+    load_weights:       bool = False
+    save_weights:       bool = True            #IF BOTH TRUE, YOU ARE OVERWRITING YOUR PREVIOUSLY SAVED WEIGHTS
+    batch_size:         int = 1
     max_epochs:         int = 20
     accelerator:        str = 'auto'
     acc_devices:        int = 1
@@ -94,14 +98,13 @@ class BPSConfig:
 
 class ResNet101(resnet.ResNet):
     """
-    We will use the Resnet101 pretrained model for feature extraction and use with TSNE
-    The original Resnet101 had 1000 output classes, which it used for classification.
-    We will remove the final fully connected layer, and use the output of the final
-    convolutional layer to investigate the features that the model has learned on the
-    BPS dataset.
+    This is a 101-layer Residual Network (ResNet) baseline model 
+    to classify input cells for signs of X-Ray or Fe 
+    radiation. To ensure high-quality classification, 
+    we employed transfer learning.
     """
     def __init__(self, num_classes=1000, pretrained=True, 
-                 pre_weights=None, 
+                 config:BPSConfig = None,
                  **kwargs):
         
         # Start with the standard resnet101
@@ -112,11 +115,17 @@ class ResNet101(resnet.ResNet):
             **kwargs
         )
         if pretrained:
-            if pre_weights:
-                self.load_state_dict(torch.load(os.path.join(root, 'src', 'model', 'supervised', 'weights', 'resnet_weights.pth')))
+            if config != None:
+                if config.load_weights:
+                    self.fc = torch.nn.Linear(self.fc.in_features, 2)
+                    self.load_state_dict(torch.load(config.save_models_dir))
+                else:
+                    state_dict = load_state_dict_from_url("https://download.pytorch.org/models/resnet101-5d3b4d8f.pth",
+                                                        progress=True)
+                    self.load_state_dict(state_dict)
             else:
                 state_dict = load_state_dict_from_url("https://download.pytorch.org/models/resnet101-5d3b4d8f.pth",
-                                                      progress=True)
+                                                        progress=True)
                 self.load_state_dict(state_dict)
  
     def _forward_impl(self, x):
@@ -189,21 +198,15 @@ def main():
     bps_datamodule.setup(stage="validate")
 
     ### PRETRAINED WEIGHTS ###
-    pretrained_weights_path = None
 
-    if pretrained_weights_path:
-        model = ResNet101(num_classes=2, pretrained=True)
-    # Initialize pretrained ResNet101 model
-    else:
-        model = ResNet101(pretrained=True)
+    model = ResNet101(pretrained=True, config=config)
 
     # we need to freeze parameters so that pretrained layers aren't modified
     for param in model.parameters():
         param.requires_grad = False
 
-
-    num_classes = 2  # re-initialize the number of classes for the final transform 
-    model.fc = torch.nn.Linear(model.fc.in_features, num_classes)
+    # Set linear transform to match labels
+    model.fc = torch.nn.Linear(model.fc.in_features, 2)
 
     # define loss function and optimizer for training
     loss_func = torch.nn.CrossEntropyLoss()
@@ -216,25 +219,27 @@ def main():
     val_dataloader = bps_datamodule.val_dataloader()
 
     model.eval()
-
-    
 ################################# WANDB IS COOL #############################################
     
     wandb.init(project="BPSResNet101",
                dir=config.save_vis_dir,
+               #mode="disabled",
                config={
                    "architecture": "ResNet101",
                    "dataset": "BPS Microscopy Mouse Dataset",
                    "learning rate": "0.001",
                    "loss function": "Cross Entropy Loss",
-                   "optimizer": "Adam"})
+                   "optimizer": "Adam",
+                   "epochs": str(config.max_epochs),
+                   "batch size": str(config.batch_size)
+                   })
     
 
 
     num_epochs = config.max_epochs # CHANGE CONFIG
 
 
-    if pretrained_weights_path == None:
+    if config.load_weights == False:
         for epoch in range(num_epochs):
             model.train()
             running_loss = 0.0
@@ -255,12 +260,58 @@ def main():
 
     correct = 0
     total = 0
+
     with torch.no_grad():
         for i, data in enumerate(val_dataloader, 0):
             images, labels = data[0].to(config.device), data[1].to(config.device)
             outputs = model(images)
             predicted = (outputs == torch.max(outputs, dim=1, keepdim=True)[0]).float()
             result = []
+            """
+            if i == 1:
+                labels_str_REAL = []
+                labels_str_PRED = []
+                for image in range(config.batch_size):
+                    if torch.equal(labels[image], torch.tensor([0., 1.], device=config.device)):
+                        label = "X-Ray"
+                    elif torch.equal(labels[image], torch.tensor([1., 0.], device=config.device)):
+                        label = "Fe"
+                    labels_str_REAL.append(label)
+                    
+                    if torch.equal(predicted[image], torch.tensor([0., 1.], device=config.device)):
+                        label = "X-Ray"
+                    elif torch.equal(predicted[image], torch.tensor([1., 0.], device=config.device)):
+                        label = "Fe"
+
+                    labels_str_PRED.append(label)
+
+                f, axarr = plt.subplots(2,2)
+                axarr[0,0].imshow(images[0].permute(1, 2, 0).cpu().numpy())
+                axarr[0,0].set_title(f'Predicted: {labels_str_PRED[0]}, Actual: {labels_str_REAL[0]}')
+
+                axarr[0,0].set_xticks([])
+                axarr[0,0].set_yticks([])
+
+                axarr[0,1].imshow(images[1].permute(1, 2, 0).cpu().numpy())
+                axarr[0,1].set_title(f'Predicted: {labels_str_PRED[1]}, Actual: {labels_str_REAL[1]}')
+
+                axarr[0,1].set_xticks([])
+                axarr[0,1].set_yticks([])
+
+                axarr[1,0].imshow(images[2].permute(1, 2, 0).cpu().numpy())
+                axarr[1,0].set_title(f'Predicted: {labels_str_PRED[2]}, Actual: {labels_str_REAL[2]}')
+
+                axarr[1,0].set_xticks([])
+                axarr[1,0].set_yticks([])
+
+                axarr[1,1].imshow(images[3].permute(1, 2, 0).cpu().numpy())
+                axarr[1,1].set_title(f'Predicted: {labels_str_PRED[3]}, Actual: {labels_str_REAL[3]}')
+
+                axarr[1,1].set_xticks([])
+                axarr[1,1].set_yticks([])
+
+                plt.savefig('batch_sample.png')
+            """
             for r1, r2 in zip(predicted, labels):
                 result.append(int(torch.equal(r1, r2)))
             correct += sum(result)
@@ -268,11 +319,8 @@ def main():
     wandb.log({"accuracy": correct / total})
 
     # Save the model
-    save = False
-    # CHANGE THE PATH WHEN SAVING NEW MODEL
-    if save:
-        path = os.path.join(root, 'src', 'model', 'supervised', 'weights', 'resnet_weights2.pth')
-        torch.save(model.state_dict(), path)
+    if config.save_weights:
+        torch.save(model.state_dict(), config.save_models_dir)
     
     wandb.finish()
     

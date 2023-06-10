@@ -34,7 +34,8 @@ from src.dataset.bps_dataset import BPSMouseDataset
 from src.dataset.augmentation import (
     NormalizeBPS,
     ResizeBPS,
-    ToTensor
+    ToTensor,
+    RescaleBPS
 )
 
 # To define the PyTorch Lightning DataModule, we need to define a class that inherits from the
