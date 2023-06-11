@@ -302,7 +302,11 @@ class GAN(L.LightningModule):
             plt.xticks([])
             plt.yticks([])
             plt.axis('off')
-            plt.savefig(f'gen_data_epoch_{self.current_epoch}.jpeg', bbox_inches='tight', pad_inches=0)
+            particle_type =""
+            if "Fe" in self.gen_image_save_dir: particle_type = "Fe"
+            if "Xray" in self.gen_image_save_dir: particle_type = "Xray"
+            path = os.join(self.gen_image_save_dir, f'{particle_type}_GAN_image_epoch_{self.current_epoch}.jpeg')
+            plt.savefig(path, bbox_inches='tight', pad_inches=0)
 
 
     def create_images(self, num_images, particle_type):
@@ -409,21 +413,21 @@ def main():
     #checkpoint = os.path.join(root, 'models', 'weights', 'epoch=66-step=7504.ckpt')
     
     # Uncomment this line to train a GAN to generate Fe radiated images.
-    # model, bps_datamodule = define_gan(config=config, 
-    #                                    height=128,
-    #                                    width=18,
-    #                                    particle_type="Fe",
-    #                                    train_img_save=True)
+    model, bps_datamodule = define_gan(config=config, 
+                                       height=128,
+                                       width=128,
+                                       particle_type="Fe",
+                                       train_img_save=True)
 
     # Download the data
     # bps_datamodule.prepare_data()
     
     # Uncomment this line to train a GAN to generate Xray radiated images.
-    model, bps_datamodule = define_gan(config=config, 
-                                       height=128,
-                                       width=128,
-                                       particle_type="Xray",
-                                       train_img_save=True)
+    # model, bps_datamodule = define_gan(config=config, 
+    #                                    height=128,
+    #                                    width=128,
+    #                                    particle_type="Xray",
+    #                                    train_img_save=True)
     
     # Create a PyTorch Lightning trainer.
     trainer = L.Trainer(
