@@ -256,9 +256,10 @@ class GAN(L.LightningModule):
         if self.device == 'cuda': self.toggle_optimizer(optimizer=optimizer_g, optimizer_idx=0)
         else: self.toggle_optimizer(optimizer=optimizer_g)
         
-        noise = torch.zeros(imgs.size(0), self.hparams.latent_dim)
-        noise += (self.variance) * torch.randn(imgs.size(0), self.hparams.latent_dim).to(self.device)
-        if (batch_idx % 4 == 0): wandb.log({"variance": self.variance})
+        noise = torch.randn(imgs.size(0), self.hparams.latent_dim)
+        #noise = (fake_images.std()**0.5) * torch.randn(128, self.hparams.latent_dim)
+        # noise += (self.variance) * torch.randn(imgs.size(0), self.hparams.latent_dim).to(self.device)
+        # if (batch_idx % 4 == 0): wandb.log({"variance": self.variance})
         self.variance += self.increase
         noise = Variable(noise)
         fake_images = self(noise)
@@ -290,8 +291,7 @@ class GAN(L.LightningModule):
     def on_train_epoch_end(self):
         # # Save the image
         if self.train_image_save:
-            noise = torch.zeros(self.height, self.hparams.latent_dim)
-            noise += (self.variance) * torch.randn(self.height, self.hparams.latent_dim).to(self.device)
+            noise = torch.randn(self.height, self.hparams.latent_dim)
             generated_imgs = self(noise)
             sample_img = generated_imgs[0]
         
@@ -305,7 +305,7 @@ class GAN(L.LightningModule):
             particle_type =""
             if "Fe" in self.gen_image_save_dir: particle_type = "Fe"
             if "Xray" in self.gen_image_save_dir: particle_type = "Xray"
-            path = os.join(self.gen_image_save_dir, f'{particle_type}_GAN_image_epoch_{self.current_epoch}.jpeg')
+            path = os.path.join(self.gen_image_save_dir, f'{particle_type}_GAN_image_epoch_{self.current_epoch}.jpeg')
             plt.savefig(path, bbox_inches='tight', pad_inches=0)
 
 
@@ -314,8 +314,8 @@ class GAN(L.LightningModule):
         Produce num_images amount of images.
         """
         for i in range(num_images):
-            z = torch.randn(128, self.hparams.latent_dim)
-            generated_imgs = self(z)
+            noise = torch.randn(128, self.hparams.latent_dim)
+            generated_imgs = self(noise)
             sample_img = generated_imgs[0]
         
             # Convert the grid to a numpy array
@@ -402,7 +402,7 @@ def main():
     wandb.init(project="MNIST-GAN",
                dir=config.save_vis_dir,
                mode="run",
-               name="Revamped_Xray-200-epcohs",
+               name="Revamped-Xray-200-epcohs-v2",
                config=
                {
                    "architecture": "MNIST GAN",
