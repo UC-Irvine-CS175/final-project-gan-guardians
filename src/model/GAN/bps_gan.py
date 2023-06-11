@@ -413,21 +413,21 @@ def main():
     #checkpoint = os.path.join(root, 'models', 'weights', 'epoch=66-step=7504.ckpt')
     
     # Uncomment this line to train a GAN to generate Fe radiated images.
-    model, bps_datamodule = define_gan(config=config, 
-                                       height=128,
-                                       width=128,
-                                       particle_type="Fe",
-                                       train_img_save=True)
+    # model, bps_datamodule = define_gan(config=config, 
+    #                                    height=128,
+    #                                    width=128,
+    #                                    particle_type="Fe",
+    #                                    train_img_save=True)
 
     # Download the data
     # bps_datamodule.prepare_data()
     
     # Uncomment this line to train a GAN to generate Xray radiated images.
-    # model, bps_datamodule = define_gan(config=config, 
-    #                                    height=128,
-    #                                    width=128,
-    #                                    particle_type="Xray",
-    #                                    train_img_save=True)
+    model, bps_datamodule = define_gan(config=config, 
+                                       height=128,
+                                       width=128,
+                                       particle_type="Xray",
+                                       train_img_save=True)
     
     # Create a PyTorch Lightning trainer.
     trainer = L.Trainer(
