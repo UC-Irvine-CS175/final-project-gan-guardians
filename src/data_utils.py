@@ -314,7 +314,6 @@ def main():
 
     output_dir = '../data/processed'
 
-    """
     # s3 bucket info
     bucket_name = 'nasa-bps-training-data'
     s3_path = 'Microscopy/train'
@@ -342,11 +341,11 @@ def main():
         out_dir_csv=output_dir,
         random_state=42,
         stratify_col="particle_type")
-    """
-    val_save_file_path = pyprojroot.here()/'data'/'processed'
-    val_path_fname = val_save_file_path/'meta_dose_hi_hr_4_post_exposure_test.csv'
     
-    seperate_particle_type(val_path_fname, val_save_file_path)
+    val_save_file_path = pyprojroot.here()/'data'/'processed'
+    val_path_fname = val_save_file_path/'meta_dose_hi_hr_4_post_exposure.csv'
+    
+    # seperate_particle_type(val_path_fname, val_save_file_path)
 
 
 if __name__ == "__main__":
