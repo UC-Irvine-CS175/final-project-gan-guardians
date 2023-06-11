@@ -219,10 +219,41 @@ class GAN(L.LightningModule):
         # Get optimizers.
         optimizer_g, optimizer_d = self.optimizers()
 
+        # Train the generator.
+        if self.device == 'cuda': self.toggle_optimizer(optimizer=optimizer_g, optimizer_idx=0)
+        else: self.toggle_optimizer(optimizer=optimizer_g)
+        optimizer_g.zero_grad()
+        
+        noise = torch.randn(imgs.size(0), self.hparams.latent_dim)
+        #noise = (fake_images.std()**0.5) * torch.randn(128, self.hparams.latent_dim)
+        # noise += (self.variance) * torch.randn(imgs.size(0), self.hparams.latent_dim).to(self.device)
+        # if (batch_idx % 4 == 0): wandb.log({"variance": self.variance})
+        self.variance += self.increase
+        noise = Variable(noise)
+        fake_images = self(noise)
+        outputs = self.discriminator(fake_images)
+
+        # Calculate generator loss.
+        g_loss = self.adversarial_loss(outputs, real_labels)
+        if (batch_idx % 4 == 0): wandb.log({"g_loss": g_loss})
+        self.manual_backward(g_loss)
+        optimizer_g.step()
+
+        if self.device.type == 'cuda': self.untoggle_optimizer(optimizer_idx=0)
+        else: self.untoggle_optimizer(optimizer=optimizer_g) 
+        
+        # Log generated images.
+        sample_imgs = fake_images[:6]
+        grid = torchvision.utils.make_grid(sample_imgs)
+        grid_np = grid.permute(1, 2, 0).cpu().numpy()
+        if (batch_idx % 4 == 0):
+            wandb.log({"generated_images": [wandb.Image(grid_np, caption="Generated Images")]})
+        
         # Train the discriminator.
         if self.device == 'cuda': self.toggle_optimizer(optimizer=optimizer_d, optimizer_idx=1)
         else: self.toggle_optimizer(optimizer=optimizer_d)
-        
+        optimizer_d.zero_grad()
+
         # Compute discriminator loss using real images.
         outputs = self.discriminator(imgs)
         d_loss_real = self.adversarial_loss(outputs, real_labels)
@@ -237,45 +268,12 @@ class GAN(L.LightningModule):
         # Compute total loss.
         d_loss = d_loss_real + d_loss_fake
         if (batch_idx % 4 == 0): wandb.log({"d_loss": d_loss})
-        optimizer_d.zero_grad()
-        optimizer_g.zero_grad()
         self.manual_backward(d_loss)
         optimizer_d.step()
 
         if self.device == 'cuda': self.untoggle_optimizer(optimizer_idx=1)
         else: self.untoggle_optimizer(optimizer=optimizer_d)
 
-        # Log generated images.
-        sample_imgs = fake_images[:6]
-        grid = torchvision.utils.make_grid(sample_imgs)
-        grid_np = grid.permute(1, 2, 0).cpu().numpy()
-        if (batch_idx % 4 == 0):
-            wandb.log({"generated_images": [wandb.Image(grid_np, caption="Generated Images")]})
-
-        # Train the generator.
-        if self.device == 'cuda': self.toggle_optimizer(optimizer=optimizer_g, optimizer_idx=0)
-        else: self.toggle_optimizer(optimizer=optimizer_g)
-        
-        noise = torch.randn(imgs.size(0), self.hparams.latent_dim)
-        #noise = (fake_images.std()**0.5) * torch.randn(128, self.hparams.latent_dim)
-        # noise += (self.variance) * torch.randn(imgs.size(0), self.hparams.latent_dim).to(self.device)
-        # if (batch_idx % 4 == 0): wandb.log({"variance": self.variance})
-        self.variance += self.increase
-        noise = Variable(noise)
-        fake_images = self(noise)
-        outputs = self.discriminator(fake_images)
-
-        # Calculate generator loss.
-        g_loss = self.adversarial_loss(outputs, real_labels)
-        if (batch_idx % 4 == 0): wandb.log({"g_loss": g_loss})
-        optimizer_d.zero_grad()
-        optimizer_g.zero_grad()
-        self.manual_backward(g_loss)
-        optimizer_g.step()
-
-        if self.device.type == 'cuda': self.untoggle_optimizer(optimizer_idx=0)
-        else: self.untoggle_optimizer(optimizer=optimizer_g) 
-        
 
     def configure_optimizers(self):
         lr = self.hparams.lr
