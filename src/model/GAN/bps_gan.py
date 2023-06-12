@@ -12,7 +12,7 @@ import torch.nn.functional as F
 import torchvision
 import torchvision.transforms as transforms
 from PIL import Image
-import cv2
+import csv
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader, random_split
 from torch.autograd import Variable
@@ -311,19 +311,28 @@ class GAN(L.LightningModule):
         """
         Produce num_images amount of images.
         """
-        for i in range(num_images):
-            noise = torch.randn(128, self.hparams.latent_dim)
-            generated_imgs = self(noise)
-            sample_img = generated_imgs[0]
-        
-            # Convert the grid to a numpy array
-            sample_img_np = sample_img.permute(1, 2, 0).cpu().detach().numpy()
-            plt.figure()
-            plt.imshow(sample_img_np)
-            plt.xticks([])
-            plt.yticks([])
-            plt.savefig(f'gen_{particle_type}_data_{i}.jpeg', bbox_inches='tight', pad_inches=0)
-            #cv2.imwrite(f'gen_{particle_type}_data_{i}.jpeg', sample_img_np)
+        csv_path = os.path.join('generated', f'{particle_type}_generated_meta.csv')
+        with open(csv_path, 'w', newline='') as file:
+            writer = csv.writer(file)  
+            field = ["", "filename", "dose_Gy", "particle_type", "hr_post_exposure"]
+            writer.writerow(field)
+            for i in range(num_images):
+                noise = torch.randn(128, self.hparams.latent_dim)
+                generated_imgs = self(noise)
+                sample_img = generated_imgs[0]
+            
+                # Convert the grid to a numpy array
+                sample_img_np = sample_img.permute(1, 2, 0).cpu().detach().numpy()
+                plt.figure()
+                plt.imshow(sample_img_np)
+                plt.xticks([])
+                plt.yticks([])
+                filename = f'gen_{particle_type}_data_{i}.jpeg'
+                path = os.path.join('generated', filename)
+                writer.writerow([i, filename, 0.82, "Fe", 4])
+                plt.savefig(path, bbox_inches='tight', pad_inches=0)
+                print("Saved image:", i)
+                plt.close()
             
             
 def define_gan(
@@ -389,7 +398,7 @@ def define_gan(
     
     # Load checkpoint if one was given.
     if checkpoint_path != None:
-        model = model.load_from_checkpoint(checkpoint_path)
+        model = model.load_from_checkpoint(checkpoint_path, strict=False)
 
     # Return the defined GAN model.
     return model, bps_datamodule
@@ -399,8 +408,8 @@ def main():
     config = BPSConfig()    
     wandb.init(project="MNIST-GAN",
                dir=config.save_vis_dir,
-               mode="run",
-               name="Revamped-Xray-200-epcohs-v2",
+               mode="disabled",
+               name="Revamped-Xray-200-epcohs-v2-Actual-Final",
                config=
                {
                    "architecture": "MNIST GAN",
@@ -408,33 +417,38 @@ def main():
                })
     
     # Checkpoint for continuing training.
-    #checkpoint = os.path.join(root, 'models', 'weights', 'epoch=66-step=7504.ckpt')
+    checkpoint = os.path.join(root, 'models', 'weights', 'Fe-GAN-600.ckpt')
     
     # Uncomment this line to train a GAN to generate Fe radiated images.
-    # model, bps_datamodule = define_gan(config=config, 
-    #                                    height=128,
-    #                                    width=128,
-    #                                    particle_type="Fe",
-    #                                    train_img_save=True)
+    model, bps_datamodule = define_gan(config=config, 
+                                       height=128,
+                                       width=128,
+                                       particle_type="Fe",
+                                       train_img_save=True,
+                                       checkpoint_path=checkpoint)
 
     # Download the data
     # bps_datamodule.prepare_data()
     
     # Uncomment this line to train a GAN to generate Xray radiated images.
-    model, bps_datamodule = define_gan(config=config, 
-                                       height=128,
-                                       width=128,
-                                       particle_type="Xray",
-                                       train_img_save=True)
+    # model, bps_datamodule = define_gan(config=config, 
+    #                                    height=128,
+    #                                    width=128,
+    #                                    particle_type="Xray",
+    #                                    train_img_save=True
+    #                                    checkpoint_path=checkpoint)
+    
+    model.create_images(50000, 'Fe')
+    
     
     # Create a PyTorch Lightning trainer.
-    trainer = L.Trainer(
-        accelerator=config.accelerator,
-        devices=config.acc_devices,
-        max_epochs=config.max_epochs,
-    )
-    # Train the model.
-    trainer.fit(model, bps_datamodule.train_dataloader())
+    # trainer = L.Trainer(
+    #     accelerator=config.accelerator,
+    #     devices=config.acc_devices,
+    #     max_epochs=config.max_epochs,
+    # )
+    # # Train the model.
+    # trainer.fit(model, bps_datamodule.train_dataloader())
     wandb.finish()
 
 

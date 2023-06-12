@@ -5,6 +5,7 @@ data/generated
 data/processed/*.tif
 src/model/wandb
 lightning_logs
+generated/
 
 models/dummy_vis
 models/wandb
