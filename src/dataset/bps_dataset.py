@@ -167,6 +167,9 @@ class BPSMouseDataset(torch.utils.data.Dataset):
         # Convert tensor data type to Float
         particle_type_tensor = particle_type_tensor.type(torch.FloatTensor)
         
+        # Uncomment when training the GAN.
+        #particle_type_tensor = torch.tensor(1)
+        
 
         # return the image and associated label
         return img_array, particle_type_tensor

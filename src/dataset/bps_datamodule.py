@@ -176,7 +176,7 @@ class BPSDataModule(pl.LightningDataModule):
         """
         Returns the training dataloader.
         """
-        return DataLoader(self.train_BPSMouseDataset, batch_size=self.batch_size) #, num_workers=self.num_workers)
+        return DataLoader(self.train_BPSMouseDataset, batch_size=self.batch_size, num_workers=self.num_workers) #, num_workers=self.num_workers)
     
     def val_dataloader(self) -> EVAL_DATALOADERS:
         """
