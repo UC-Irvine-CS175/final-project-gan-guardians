@@ -3,7 +3,7 @@
 - Ye Aung
 - Arthur Hsu
 - Warren Wei Leu
-- Tyler Fermanian
+- Tyler Fermanian @TylerFermUCI
 - Tariq Brown
 
 # Getting Started
@@ -11,7 +11,7 @@
 Go to `setup/environments` and follow the directions to setup your conda environment based on whether your machine is gpu or cpu enabled using Miniconda, a lightweight form of Anaconda.
 
 ## Downloading Data From AWS
-Run the `main()` function from bps_gan.py to download the images from AWS as .tiff files.
+Run the `main()` function from `bps_gan.py` to download the images from AWS as .tiff files.
 Call the `separate_particle_type()` function to separate different particle types into their own .csv files.
 
 ## Training the GAN model
